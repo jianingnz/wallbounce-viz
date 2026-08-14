@@ -1,1 +1,0 @@
-{"dataset": "MOVi-spheres wall-bounce \u00b7 train split", "n_frames": 6, "n_particles": 128, "context_len": 5, "bounds": [[0.0, 1.0], [0.1, 0.9], [0.0, 1.0]], "split": "train", "body": "wall_x+", "scene_id": 299, "j": 13, "rms_mm": 2.025}
