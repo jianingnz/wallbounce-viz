@@ -148,7 +148,7 @@
 <script>
 (function(){
   // ================= loss curves =================
-  const BEST_STEP = 7000;
+  const BEST_STEP = 19000;
   function drawCurves(cv){
     const svg=document.getElementById('chart');
     const W=Math.max(svg.clientWidth,480), H=190, L=52, R=86, T=10, B=24;
@@ -169,7 +169,7 @@
     g+=`<line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--axis)" stroke-width="1"/>`;
     // best-checkpoint marker
     g+=`<line x1="${X(BEST_STEP)}" y1="${T}" x2="${X(BEST_STEP)}" y2="${H-B}" stroke="var(--axis)" stroke-width="1" stroke-dasharray="3 3"/>`;
-    g+=`<text x="${X(BEST_STEP)+4}" y="${T+10}" font-size="10" fill="var(--soft)" font-family="ui-monospace,Menlo,monospace">best ckpt @ 7k</text>`;
+    g+=`<text x="${X(BEST_STEP)+4}" y="${T+10}" font-size="10" fill="var(--soft)" font-family="ui-monospace,Menlo,monospace">best ckpt @ 19k</text>`;
     // series
     const series=[
       ['train loss', cv.train_loss, 'var(--s1)'],
