@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MOVi-spheres wall bounce — one-step viewer</title>
+<title>MOVi-spheres wall bounce — 8-step viewer</title>
 <style>
   :root{
     --bg:#eef1f5; --panel:#ffffff; --ink:#1a2432; --soft:#5c6b7f; --line:#d5dde6;
@@ -107,7 +107,7 @@
 </head>
 <body>
   <header>
-    <h1>Wall bounce — one-step prediction · val (unseen scenes)</h1>
+    <h1>Wall bounce — 8-step prediction · val (unseen scenes)</h1>
     <nav class="tabs" id="tabs" aria-label="Windows"></nav>
     <button class="tab util" id="curvebtn" aria-expanded="true">curves ▾</button>
     <span class="meta" id="meta">loading…</span>
@@ -138,14 +138,30 @@
           <div class="ctip" id="tip_val"></div>
         </div>
       </div>
+      <div class="chart-card" id="card_hz" style="grid-column:1 / -1">
+        <div class="chead">
+          <span class="ctitle">Val error over the 8-frame horizon (meters) — ball distance from GT</span>
+          <span class="legend">
+            <span><span class="chip" style="background:var(--s1)"></span>wall-impact windows</span>
+            <span><span class="chip" style="background:var(--s2)"></span>floor-impact</span>
+            <span><span class="chip" style="background:var(--s3)"></span>free flight</span>
+            <span><span class="chip" style="background:var(--axis)"></span>const-velocity baseline (wall)</span>
+          </span>
+        </div>
+        <div class="chartwrap" id="wrap_hz">
+          <svg id="chart_hz" role="img" aria-label="Per-frame position error in meters over the 8 predicted frames: the model stays at centimeter scale across wall, floor, and free windows while the constant-velocity baseline grows to several meters after a wall impact."></svg>
+          <div class="ctip" id="tip_hz"></div>
+        </div>
+      </div>
       <div class="cfoot" id="cnote">
         <b>Validation error</b> = how far the predicted ball's particles are from the GT ball, in real
-        meters (point-RMS; exact conversion of the held-out flow-matching loss — the box is 10 m wide,
-        the ball Ø 0.7–1.4 m, and it moves ~0.3 m per frame). Averaged over the random denoising noise
-        levels used in validation; the impact eval at the hardest pure-noise setting reads ~0.02 m at
-        wall impacts vs 0.26 m for constant-velocity. <b>live weights</b> = the raw weights at that step;
-        <b>EMA weights</b> = the exponential-moving-average copy (decay 0.9999) that <code>best.pt</code>,
-        all evals, and the viewer use.
+        meters (point-RMS; the box is 10 m wide, the ball Ø 0.7–1.4 m, moving ~0.3 m per frame). The
+        top-right chart converts the per-step val loss exactly; the horizon chart above shows the strict
+        pure-noise eval per predicted frame: after a WALL impact the model stays at 2–5 cm across all
+        8 frames while constant-velocity flies ~3.4 m through the wall (100% wall penetration; the model
+        penetrates in 4% of wall windows). <b>live weights</b> = raw weights at that step; <b>EMA
+        weights</b> = the exponential-moving-average copy (decay 0.9999) that <code>best.pt</code>, all
+        evals, and the viewer use.
       </div>
       <details class="tbl"><summary>data table (validation checkpoints)</summary>
         <div class="tscroll">
@@ -159,7 +175,7 @@
     <canvas id="c"></canvas>
     <div class="labels">
       <div class="vlabel" id="lbl-gt"><span class="swatch"></span>Ground truth</div>
-      <div class="vlabel" id="lbl-pred"><span class="swatch"></span>Prediction · one-step post-impact</div>
+      <div class="vlabel" id="lbl-pred"><span class="swatch"></span>Prediction · 8 frames, jointly denoised</div>
       <div class="divider"></div>
       <div class="hint">drag to orbit · scroll to zoom · both views share one camera</div>
     </div>
@@ -185,11 +201,11 @@
   function nearest(pts, s){ let b = pts[0];
     for(const p of pts){ if(Math.abs(p[0]-s) < Math.abs(b[0]-s)) b = p; } return b; }
 
-  function lineChart(svgId, tipId, wrapId, series, {best=null, ylo=YLO, yhi=YHI, ticks=[1e-4,1e-3,1e-2,1e-1], fmt=(v=>v.toExponential(0)), tipfmt=(v=>v.toExponential(2))}={}){
+  function lineChart(svgId, tipId, wrapId, series, {best=null, ylo=YLO, yhi=YHI, ticks=[1e-4,1e-3,1e-2,1e-1], fmt=(v=>v.toExponential(0)), tipfmt=(v=>v.toExponential(2)), xmin=0, xmax=XMAX, xticks=[0,5000,10000,15000,20000], xfmt=(s=>s/1000+'k'), xstep=200, xlabel=(s=>'step '+s), dashed=new Set()}={}){
     const svg = document.getElementById(svgId);
     const W = Math.max(svg.clientWidth, 320), H = 160, L = 52, R = 14, T = 8, B = 22;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    const X = s => L + (W-L-R) * (s / XMAX);
+    const X = s => L + (W-L-R) * ((s-xmin) / (xmax-xmin));
     const Y = v => T + (H-T-B) * (1 - (Math.log10(Math.max(v,ylo)) - Math.log10(ylo))
                                      / (Math.log10(yhi) - Math.log10(ylo)));
     let g = '';
@@ -197,8 +213,8 @@
       g += `<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="var(--grid)" stroke-width="1"/>`;
       g += `<text x="${L-6}" y="${Y(d)+3.5}" text-anchor="end" font-size="10" fill="var(--soft)" font-family="ui-monospace,Menlo,monospace">${fmt(d)}</text>`;
     }
-    for(const s of [0,5000,10000,15000,20000]){
-      g += `<text x="${X(s)}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--soft)" font-family="ui-monospace,Menlo,monospace">${s/1000}k</text>`;
+    for(const s of xticks){
+      g += `<text x="${X(s)}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--soft)" font-family="ui-monospace,Menlo,monospace">${xfmt(s)}</text>`;
     }
     g += `<line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="var(--axis)" stroke-width="1"/>`;
     if(best != null){
@@ -207,7 +223,7 @@
     }
     for(const s of series){
       const path = s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('');
-      g += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+      g += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"${dashed.has(s.name)?' stroke-dasharray="5 4"':''}/>`;
     }
     g += `<line class="xh" x1="0" y1="${T}" x2="0" y2="${H-B}" stroke="var(--axis)" stroke-width="1" visibility="hidden"/>`;
     svg.innerHTML = g;
@@ -216,11 +232,11 @@
     svg.addEventListener('mousemove', e => {
       const r = svg.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - r.left)/r.width));
-      const step = Math.round(frac * XMAX / 200) * 200;
+      const step = Math.max(xmin, Math.round((xmin + frac * (xmax-xmin)) / xstep) * xstep);
       const x = X(step);
       const xh = svg.querySelector('.xh');
       xh.setAttribute('x1', x); xh.setAttribute('x2', x); xh.setAttribute('visibility','visible');
-      tip.innerHTML = `<div><b>step ${step}</b></div>` + series.map(s => {
+      tip.innerHTML = `<div><b>${xlabel(step)}</b></div>` + series.map(s => {
         const p = nearest(s.pts, step);
         return `<div><span class="chip" style="background:${s.color}"></span>${s.name} ${tipfmt(p[1])} <span style="color:var(--soft)">@${p[0]}</span></div>`;
       }).join('');
@@ -259,6 +275,18 @@
   fetch('data/curves.json').then(r=>r.json()).then(cv=>{
     drawAll(cv);
     addEventListener('resize', ()=>drawAll(cv));
+  });
+  fetch('data/horizon.json').then(r=>r.json()).then(hz=>{
+    const mk = (name, arr, color) => ({name, color, pts: hz.frames.map((f,i)=>[f, arr[i]])});
+    const draw = () => lineChart('chart_hz','tip_hz','wrap_hz',
+      [mk('wall', hz.wall, 'var(--s1)'), mk('floor', hz.floor, 'var(--s2)'),
+       mk('free', hz.free, 'var(--s3)'), mk('baseline·wall', hz.base_wall, 'var(--axis)')],
+      {ylo: 1e-3, yhi: 10, ticks: [1e-3, 1e-2, 1e-1, 1, 10],
+       fmt: v => v >= 1 ? v+' m' : (v >= 0.01 ? Math.round(v*100)+' cm' : Math.round(v*1000)+' mm'),
+       tipfmt: v => v >= 0.1 ? v.toFixed(2)+' m' : (v*1000).toFixed(1)+' mm',
+       xmin: 1, xmax: 8, xticks: [1,2,3,4,5,6,7,8], xfmt: s=>'+'+s, xstep: 1,
+       xlabel: s=>'predicted frame +'+s, dashed: new Set(['baseline·wall'])});
+    draw(); addEventListener('resize', draw);
   });
   document.getElementById('curvebtn').addEventListener('click', function(){
     const hidden = document.getElementById('curves').classList.toggle('hidden');
