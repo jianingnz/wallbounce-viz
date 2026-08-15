@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MOVi-spheres wall bounce — 8-step viewer</title>
+<title>MOVi-spheres wall bounce — prediction viewer</title>
 <style>
   :root{
     --bg:#eef1f5; --panel:#ffffff; --ink:#1a2432; --soft:#5c6b7f; --line:#d5dde6;
     --accent:#0e7c8c; --gt:#1f6feb; --pred:#e8710a;
-    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;   /* validated chart series slots */
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
     --grid:#e4e9ef; --axis:#c0cad4;
   }
   *{box-sizing:border-box}
@@ -19,11 +19,11 @@
     display:flex; flex-direction:column; overflow:hidden;
   }
   header{
-    display:flex; align-items:center; gap:14px; padding:10px 18px; flex-wrap:wrap;
+    display:flex; align-items:center; gap:12px; padding:10px 18px; flex-wrap:wrap;
     border-bottom:1px solid var(--line); background:var(--panel); flex:none;
   }
   header h1{font-size:15px; font-weight:650; margin:0; letter-spacing:-.01em; white-space:nowrap}
-  .tabs{display:flex; gap:6px; flex-wrap:wrap}
+  .tabs{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
   .tab{
     font-size:12.5px; font-weight:600; font-family:ui-monospace,Menlo,monospace;
     padding:6px 13px; border-radius:100px; border:1px solid var(--line);
@@ -33,10 +33,14 @@
   .tab.active{background:var(--accent); border-color:var(--accent); color:#fff}
   .tab:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
   .tab.util{border-style:dashed}
+  .tab.exp{background:#fff; border-width:1.5px; font-weight:700}
+  .tab.exp.active{background:var(--ink); border-color:var(--ink); color:#fff}
+  .tab.stage{padding:4px 10px; font-size:11.5px}
+  .tab.stage.active{background:var(--pred); border-color:var(--pred); color:#fff}
+  .sep{width:1px; height:20px; background:var(--line); margin:0 2px}
   header .meta{font-size:11.5px; color:var(--soft); font-family:ui-monospace,Menlo,monospace;
     flex-basis:100%; line-height:1.45}
 
-  /* ---- curves panel: two separate charts ---- */
   #curves{flex:none; background:var(--panel); border-bottom:1px solid var(--line);
     padding:10px 18px 8px}
   #curves.hidden{display:none}
@@ -44,7 +48,7 @@
   @media(max-width:900px){ .cgrid{grid-template-columns:1fr} }
   .chart-card .chead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:2px}
   .chart-card .ctitle{font-size:12.5px; font-weight:650}
-  .legend{display:flex; gap:12px; font-size:11.5px; color:var(--soft)}
+  .legend{display:flex; gap:12px; font-size:11.5px; color:var(--soft); flex-wrap:wrap}
   .legend .chip{display:inline-block; width:14px; height:3px; border-radius:2px;
     margin-right:5px; vertical-align:middle}
   .chartwrap{position:relative}
@@ -56,14 +60,6 @@
   .ctip .chip{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
   .cfoot{grid-column:1 / -1; font-size:11.5px; color:var(--soft); line-height:1.5; max-width:110ch}
   .cfoot b{color:var(--ink); font-weight:600}
-  details.tbl{grid-column:1 / -1; font-size:11px; color:var(--soft);
-    font-family:ui-monospace,Menlo,monospace; margin-top:2px}
-  details.tbl summary{cursor:pointer}
-  details.tbl .tscroll{max-height:150px; overflow:auto; margin-top:6px;
-    border:1px solid var(--line); border-radius:7px; padding:6px 10px; width:max-content}
-  details.tbl table{border-collapse:collapse}
-  details.tbl td,details.tbl th{padding:1px 14px 1px 0; text-align:right; font-weight:400}
-  details.tbl th{color:var(--soft); position:sticky; top:0; background:var(--panel)}
 
   #stage{position:relative; flex:1; min-height:0}
   canvas{display:block; width:100%; height:100%}
@@ -107,13 +103,16 @@
 </head>
 <body>
   <header>
-    <h1>Wall bounce — 8-step prediction · val (unseen scenes)</h1>
+    <h1>Wall bounce · val (unseen scenes)</h1>
+    <nav class="tabs" id="exptabs" aria-label="Experiments"></nav>
+    <span class="sep"></span>
+    <nav class="tabs" id="stagetabs" aria-label="Training stages"></nav>
     <nav class="tabs" id="tabs" aria-label="Windows"></nav>
     <button class="tab util" id="curvebtn" aria-expanded="true">curves ▾</button>
     <span class="meta" id="meta">loading…</span>
   </header>
 
-  <section id="curves" aria-label="Training and validation loss curves">
+  <section id="curves" aria-label="Charts">
     <div class="cgrid">
       <div class="chart-card">
         <div class="chead">
@@ -121,7 +120,7 @@
           <span class="legend"><span><span class="chip" style="background:var(--s1)"></span>train (per 200 steps)</span></span>
         </div>
         <div class="chartwrap" id="wrap_tr">
-          <svg id="chart_tr" role="img" aria-label="Training loss on a log scale over 20k steps."></svg>
+          <svg id="chart_tr" role="img" aria-label="Training loss on a log scale."></svg>
           <div class="ctip" id="tip_tr"></div>
         </div>
       </div>
@@ -134,40 +133,28 @@
           </span>
         </div>
         <div class="chartwrap" id="wrap_val">
-          <svg id="chart_val" role="img" aria-label="Validation error in meters on a log scale, with live and EMA weights; best checkpoint marker at the EMA-gated save."></svg>
+          <svg id="chart_val" role="img" aria-label="Validation error in meters on a log scale."></svg>
           <div class="ctip" id="tip_val"></div>
         </div>
       </div>
-      <div class="chart-card" id="card_hz" style="grid-column:1 / -1">
+      <div class="chart-card" style="grid-column:1 / -1">
         <div class="chead">
-          <span class="ctitle">Val error over the 8-frame horizon (meters) — ball distance from GT</span>
-          <span class="legend">
-            <span><span class="chip" style="background:var(--s1)"></span>wall-impact windows</span>
-            <span><span class="chip" style="background:var(--s2)"></span>floor-impact</span>
-            <span><span class="chip" style="background:var(--s3)"></span>free flight</span>
-            <span><span class="chip" style="background:var(--axis)"></span>const-velocity baseline (wall)</span>
-          </span>
+          <span class="ctitle" id="hz_title">Val error over the horizon (meters)</span>
+          <span class="legend" id="hz_legend"></span>
         </div>
         <div class="chartwrap" id="wrap_hz">
-          <svg id="chart_hz" role="img" aria-label="Per-frame position error in meters over the 8 predicted frames: the model stays at centimeter scale across wall, floor, and free windows while the constant-velocity baseline grows to several meters after a wall impact."></svg>
+          <svg id="chart_hz" role="img" aria-label="Horizon or training-progress error chart in meters."></svg>
           <div class="ctip" id="tip_hz"></div>
         </div>
       </div>
       <div class="cfoot" id="cnote">
-        <b>Validation error</b> = how far the predicted ball's particles are from the GT ball, in real
-        meters (point-RMS; the box is 10 m wide, the ball Ø 0.7–1.4 m, moving ~0.3 m per frame). The
-        top-right chart converts the per-step val loss exactly; the horizon chart above shows the strict
-        pure-noise eval per predicted frame: after a WALL impact the model stays at 2–5 cm across all
-        8 frames while constant-velocity flies ~3.4 m through the wall (100% wall penetration; the model
-        penetrates in 4% of wall windows). <b>live weights</b> = raw weights at that step; <b>EMA
-        weights</b> = the exponential-moving-average copy (decay 0.9999) that <code>best.pt</code>, all
-        evals, and the viewer use.
+        <b>Validation error</b> = distance of the predicted ball's particles from the GT ball, in real
+        meters (the box is 10 m wide, the ball Ø 0.7–1.4 m, moving ~0.3 m per frame). <b>live
+        weights</b> = raw weights at that step; <b>EMA weights</b> = the exponential-moving-average copy
+        (decay 0.9999) that <code>best.pt</code>, all evals, and this viewer use. The 16-frames tab shows
+        TRAINING PROGRESS: each stage is an intermediate checkpoint evaluated on the same val impact
+        windows (pure-noise generation, strictest setting); pick a stage to watch the early model behave.
       </div>
-      <details class="tbl"><summary>data table (validation checkpoints)</summary>
-        <div class="tscroll">
-        <table id="ctable"><thead><tr><th>step</th><th>train</th><th>val (live)</th><th>val (EMA)</th><th>err EMA</th></tr></thead><tbody></tbody></table>
-        </div>
-      </details>
     </div>
   </section>
 
@@ -175,7 +162,7 @@
     <canvas id="c"></canvas>
     <div class="labels">
       <div class="vlabel" id="lbl-gt"><span class="swatch"></span>Ground truth</div>
-      <div class="vlabel" id="lbl-pred"><span class="swatch"></span>Prediction · 8 frames, jointly denoised</div>
+      <div class="vlabel" id="lbl-pred"><span class="swatch"></span>Prediction · jointly denoised</div>
       <div class="divider"></div>
       <div class="hint">drag to orbit · scroll to zoom · both views share one camera</div>
     </div>
@@ -194,15 +181,27 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 (function(){
-  // ================= loss curves (two separate charts) =================
-  const BEST_STEP = 19000;
-  const XMAX = 20000, YLO = 1e-4, YHI = 1e-1;
+  const EXPS = {
+    '8step':  {label:'8 frames',  curves:'data/curves.json', windows:'data/index.json',
+               horizon:'data/horizon.json', best:19000, xmaxSteps:20000},
+    '16step': {label:'16 frames · training', curves:'data/curves_16step.json',
+               stages:'data/16step_stages.json', best:null, xmaxSteps:100000},
+  };
+  let curExp = '8step';
 
+  // ---------------- generic log-scale line chart ----------------
   function nearest(pts, s){ let b = pts[0];
     for(const p of pts){ if(Math.abs(p[0]-s) < Math.abs(b[0]-s)) b = p; } return b; }
 
-  function lineChart(svgId, tipId, wrapId, series, {best=null, ylo=YLO, yhi=YHI, ticks=[1e-4,1e-3,1e-2,1e-1], fmt=(v=>v.toExponential(0)), tipfmt=(v=>v.toExponential(2)), xmin=0, xmax=XMAX, xticks=[0,5000,10000,15000,20000], xfmt=(s=>s/1000+'k'), xstep=200, xlabel=(s=>'step '+s), dashed=new Set()}={}){
+  function lineChart(svgId, tipId, series, {best=null, ylo=1e-4, yhi=1e-1,
+      ticks=[1e-4,1e-3,1e-2,1e-1], fmt=(v=>v.toExponential(0)),
+      tipfmt=(v=>v.toExponential(2)), xmin=0, xmax=20000,
+      xticks=[0,5000,10000,15000,20000], xfmt=(s=>s/1000+'k'), xstep=200,
+      xlabel=(s=>'step '+s), dashed=new Set()}={}){
     const svg = document.getElementById(svgId);
+    if(!series.length || !series[0].pts.length){ svg.innerHTML =
+      `<text x="20" y="40" font-size="12" fill="var(--soft)">no data yet — publishes automatically as training progresses</text>`;
+      return; }
     const W = Math.max(svg.clientWidth, 320), H = 160, L = 52, R = 14, T = 8, B = 22;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     const X = s => L + (W-L-R) * ((s-xmin) / (xmax-xmin));
@@ -224,12 +223,14 @@
     for(const s of series){
       const path = s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('');
       g += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"${dashed.has(s.name)?' stroke-dasharray="5 4"':''}/>`;
+      if(s.dots) for(const p of s.pts)
+        g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="${s.color}"/>`;
     }
     g += `<line class="xh" x1="0" y1="${T}" x2="0" y2="${H-B}" stroke="var(--axis)" stroke-width="1" visibility="hidden"/>`;
     svg.innerHTML = g;
 
     const tip = document.getElementById(tipId);
-    svg.addEventListener('mousemove', e => {
+    svg.onmousemove = e => {
       const r = svg.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - r.left)/r.width));
       const step = Math.max(xmin, Math.round((xmin + frac * (xmax-xmin)) / xstep) * xstep);
@@ -241,52 +242,146 @@
         return `<div><span class="chip" style="background:${s.color}"></span>${s.name} ${tipfmt(p[1])} <span style="color:var(--soft)">@${p[0]}</span></div>`;
       }).join('');
       tip.style.display = 'block';
-      const px = e.clientX - r.left, flip = px > r.width - 160;
-      tip.style.left = (flip ? px-155 : px+14) + 'px';
+      const px = e.clientX - r.left, flip = px > r.width - 170;
+      tip.style.left = (flip ? px-165 : px+14) + 'px';
       tip.style.top = '6px';
-    });
-    svg.addEventListener('mouseleave', () => {
+    };
+    svg.onmouseleave = () => {
       tip.style.display = 'none';
-      svg.querySelector('.xh').setAttribute('visibility','hidden');
+      const xh = svg.querySelector('.xh'); if(xh) xh.setAttribute('visibility','hidden');
+    };
+  }
+
+  const M = v => v >= 1 ? v.toFixed(0)+' m' : (v >= 0.01 ? Math.round(v*100)+' cm' : Math.round(v*1000)+' mm');
+  const Mtip = v => v >= 0.1 ? v.toFixed(2)+' m' : (v*1000).toFixed(1)+' mm';
+
+  function drawLossCharts(cv, exp){
+    const xm = exp.xmaxSteps, xt = [0, xm/4, xm/2, 3*xm/4, xm];
+    lineChart('chart_tr','tip_tr',
+      [{name:'train', color:'var(--s1)', pts:cv.train_loss}],
+      {xmax:xm, xticks:xt});
+    const r = cv.r_delta || 0.048;
+    const toM = pts => pts.map(p => [p[0], r*Math.sqrt(3*p[1])*10]);
+    lineChart('chart_val','tip_val',
+      [{name:'val·live', color:'var(--s2)', pts:toM(cv.val_loss)},
+       {name:'val·EMA',  color:'var(--s3)', pts:toM(cv.val_loss_ema)}],
+      {best: exp.best, ylo:1e-3, yhi:1, ticks:[1e-3,1e-2,1e-1,1], fmt:M, tipfmt:Mtip,
+       xmax:xm, xticks:xt});
+  }
+
+  const HZ_LEGEND =
+    `<span><span class="chip" style="background:var(--s1)"></span>wall-impact windows</span>
+     <span><span class="chip" style="background:var(--s2)"></span>floor-impact</span>
+     <span><span class="chip" style="background:var(--s3)"></span>free flight</span>
+     <span><span class="chip" style="background:var(--axis)"></span>const-velocity baseline (wall)</span>`;
+
+  function drawHorizon8(hz){
+    document.getElementById('hz_title').textContent =
+      'Val error over the 8-frame horizon (meters) — ball distance from GT';
+    document.getElementById('hz_legend').innerHTML = HZ_LEGEND;
+    const mk = (name, arr, color) => ({name, color, pts: hz.frames.map((f,i)=>[f, arr[i]])});
+    lineChart('chart_hz','tip_hz',
+      [mk('wall', hz.wall, 'var(--s1)'), mk('floor', hz.floor, 'var(--s2)'),
+       mk('free', hz.free, 'var(--s3)'), mk('baseline·wall', hz.base_wall, 'var(--axis)')],
+      {ylo:1e-3, yhi:10, ticks:[1e-3,1e-2,1e-1,1,10], fmt:M, tipfmt:Mtip,
+       xmin:1, xmax:8, xticks:[1,2,3,4,5,6,7,8], xfmt:s=>'+'+s, xstep:1,
+       xlabel:s=>'predicted frame +'+s, dashed:new Set(['baseline·wall'])});
+  }
+
+  function drawProgress16(st){
+    document.getElementById('hz_title').textContent =
+      'Training progress — val ADE (meters) per checkpoint stage, 16-frame horizon';
+    document.getElementById('hz_legend').innerHTML = HZ_LEGEND;
+    const rows = st.stages || [];
+    if(!rows.length){ lineChart('chart_hz','tip_hz', [], {}); return; }
+    const mk = (name, key, color) => ({name, color, dots:true,
+      pts: rows.map(r => [r.step, r[key].ade_m])});
+    const xm = EXPS['16step'].xmaxSteps;
+    lineChart('chart_hz','tip_hz',
+      [mk('wall','wall','var(--s1)'), mk('floor','floor','var(--s2)'),
+       mk('free','free','var(--s3)'),
+       {name:'baseline·wall', color:'var(--axis)',
+        pts: rows.map(r=>[r.step, r.base_wall_ade_m])}],
+      {ylo:1e-3, yhi:10, ticks:[1e-3,1e-2,1e-1,1,10], fmt:M, tipfmt:Mtip,
+       xmax:xm, xticks:[0, xm/4, xm/2, 3*xm/4, xm], xstep:1000,
+       dashed:new Set(['baseline·wall'])});
+  }
+
+  // ---------------- experiment / stage / window tabs ----------------
+  const state = { curves:null, hz:null, stages:null };
+
+  function setTabs(el, items, onpick, cls='tab'){
+    el.innerHTML = '';
+    items.forEach((it) => {
+      const b = document.createElement('button');
+      b.className = cls + (it.active ? ' active' : '');
+      b.textContent = it.text;
+      if(it.title) b.title = it.title;
+      b.addEventListener('click', () => {
+        el.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        onpick(it);
+      });
+      el.appendChild(b);
     });
   }
 
-  function drawAll(cv){
-    lineChart('chart_tr','tip_tr','wrap_tr',
-      [{name:'train', color:'var(--s1)', pts:cv.train_loss}]);
-    // exact affine conversion loss -> meters: err_m = r * sqrt(3*mse) * 10 m/unit
-    const r = cv.r_delta || 0.04825;
-    const toM = pts => pts.map(p => [p[0], r*Math.sqrt(3*p[1])*10]);
-    lineChart('chart_val','tip_val','wrap_val',
-      [{name:'val·live', color:'var(--s2)', pts:toM(cv.val_loss)},
-       {name:'val·EMA',  color:'var(--s3)', pts:toM(cv.val_loss_ema)}],
-      {best: BEST_STEP, ylo: 1e-3, yhi: 1, ticks: [1e-3, 1e-2, 1e-1, 1],
-       fmt: v => v >= 1 ? '1 m' : (v >= 0.01 ? (v*100)+' cm' : (v*1000)+' mm'),
-       tipfmt: v => (v*1000).toFixed(1)+' mm'});
-    const tb = document.querySelector('#ctable tbody');
-    tb.innerHTML = cv.val_loss.map((v,i) => {
-      const tr = nearest(cv.train_loss, v[0]);
-      const em = (cv.r_delta||0.04825)*Math.sqrt(3*cv.val_loss_ema[i][1])*10*1000;
-      return `<tr><td>${v[0]}</td><td>${tr[1].toExponential(2)}</td>`+
-             `<td>${v[1].toExponential(2)}</td><td>${cv.val_loss_ema[i][1].toExponential(2)}</td>`+
-             `<td>${em.toFixed(1)} mm</td></tr>`;
-    }).join('');
+  function buildWindowTabs(list, prefix){
+    setTabs(document.getElementById('tabs'),
+      list.map((w,i)=>({text:`s${w.scene_id} · p${w.err_pct}`, active:i===0,
+                        title:`ADE ${w.rms_mm}×10⁻³ units`, w})),
+      it => loadSet(prefix + it.w.name));
+    if(list.length) loadSet(prefix + list[0].name);
   }
-  fetch('data/curves.json').then(r=>r.json()).then(cv=>{
-    drawAll(cv);
-    addEventListener('resize', ()=>drawAll(cv));
-  });
-  fetch('data/horizon.json').then(r=>r.json()).then(hz=>{
-    const mk = (name, arr, color) => ({name, color, pts: hz.frames.map((f,i)=>[f, arr[i]])});
-    const draw = () => lineChart('chart_hz','tip_hz','wrap_hz',
-      [mk('wall', hz.wall, 'var(--s1)'), mk('floor', hz.floor, 'var(--s2)'),
-       mk('free', hz.free, 'var(--s3)'), mk('baseline·wall', hz.base_wall, 'var(--axis)')],
-      {ylo: 1e-3, yhi: 10, ticks: [1e-3, 1e-2, 1e-1, 1, 10],
-       fmt: v => v >= 1 ? v+' m' : (v >= 0.01 ? Math.round(v*100)+' cm' : Math.round(v*1000)+' mm'),
-       tipfmt: v => v >= 0.1 ? v.toFixed(2)+' m' : (v*1000).toFixed(1)+' mm',
-       xmin: 1, xmax: 8, xticks: [1,2,3,4,5,6,7,8], xfmt: s=>'+'+s, xstep: 1,
-       xlabel: s=>'predicted frame +'+s, dashed: new Set(['baseline·wall'])});
-    draw(); addEventListener('resize', draw);
+
+  async function selectExp(id){
+    curExp = id;
+    const exp = EXPS[id];
+    setTabs(document.getElementById('exptabs'),
+      Object.entries(EXPS).map(([k,e])=>({text:e.label, active:k===id, k})),
+      it => selectExp(it.k), 'tab exp');
+    document.getElementById('stagetabs').innerHTML = '';
+    document.getElementById('tabs').innerHTML = '';
+    state.curves = null;
+    try{
+      state.curves = await (await fetch(exp.curves + '?t=' + Date.now())).json();
+      drawLossCharts(state.curves, exp);
+    }catch(e){
+      lineChart('chart_tr','tip_tr',[],{}); lineChart('chart_val','tip_val',[],{});
+    }
+    if(exp.windows){
+      state.hz = await (await fetch(exp.horizon)).json();
+      drawHorizon8(state.hz);
+      const list = await (await fetch(exp.windows)).json();
+      buildWindowTabs(list, '');
+    }else{
+      let st = {stages:[]};
+      try{ st = await (await fetch(exp.stages + '?t=' + Date.now())).json(); }catch(e){}
+      state.stages = st;
+      drawProgress16(st);
+      if(!st.stages.length){
+        document.getElementById('meta').textContent =
+          '16-frame run is training — stage checkpoints (1k, 2k, 5k, 10k, 20k, 40k, 70k, 100k steps) publish here automatically as training passes them';
+        return;
+      }
+      const pick = async (stg) => {
+        const list = await (await fetch(`data/${stg.dir}/index.json?t=` + Date.now())).json();
+        buildWindowTabs(list, stg.dir + '/');
+        document.getElementById('meta').textContent =
+          `stage @ step ${stg.step}: wall ADE ${(stg.wall.ade_m*100).toFixed(1)} cm · floor ${(stg.floor.ade_m*100).toFixed(1)} cm · free ${(stg.free.ade_m*100).toFixed(1)} cm · wall pen ${(stg.wall.pen*100).toFixed(0)}%`;
+      };
+      setTabs(document.getElementById('stagetabs'),
+        st.stages.map((s,i)=>({text:'@'+(s.step>=1000? Math.round(s.step/100)/10+'k' : s.step),
+                               active:i===st.stages.length-1, s})),
+        it => pick(it.s), 'tab stage');
+      await pick(st.stages[st.stages.length-1]);
+    }
+  }
+  addEventListener('resize', () => {
+    const exp = EXPS[curExp];
+    if(state.curves) drawLossCharts(state.curves, exp);
+    if(exp.windows && state.hz) drawHorizon8(state.hz);
+    if(!exp.windows && state.stages) drawProgress16(state.stages);
   });
   document.getElementById('curvebtn').addEventListener('click', function(){
     const hidden = document.getElementById('curves').classList.toggle('hidden');
@@ -294,7 +389,7 @@
     this.setAttribute('aria-expanded', String(!hidden));
   });
 
-  // ================= 3D viewer =================
+  // ---------------- 3D viewer ----------------
   const cache = {};
   let cur = null;
   let T=6, N=128, C=5, B=[[0,1],[0.1,0.9],[0,1]];
@@ -397,8 +492,8 @@
     const adeM = (adeSum/Math.max(nP,1))*10;
     document.getElementById('meta').textContent =
       `${m.dataset} · scene ${m.scene_id} · ${m.body} impact in transition ${m.j}→${m.j+1} · `+
-      `p${m.err_pct} of the val-wall error distribution · ${N} particles · ${C} GT context frames → ${T-C} predicted · `+
-      `mean ADE over predicted frames ${adeM.toFixed(3)} m (ball Ø ≈ 0.7–1.4 m, moves ~0.3 m/frame)`;
+      `p${m.err_pct} of the error distribution · ${N} particles · ${C} GT context → ${T-C} predicted · `+
+      `mean ADE ${adeM.toFixed(3)} m (ball Ø ≈ 0.7–1.4 m, ~0.3 m/frame)`;
     frame=0; setFrame(0);
     document.getElementById('loading').style.display='none';
   }
@@ -416,8 +511,6 @@
   function render(){
     const w=canvas.clientWidth, h=canvas.clientHeight, half=Math.floor(w/2);
     if(!w||!h) return;
-    // resize when EITHER dimension changes (height changes when panels/tables
-    // toggle — the old width-only check left stale black bands)
     const pr=renderer.getPixelRatio();
     if(canvas.width!==Math.floor(w*pr) || canvas.height!==Math.floor(h*pr)) renderer.setSize(w,h,false);
     camera.aspect=half/h; camera.updateProjectionMatrix();
@@ -441,22 +534,7 @@
     frame=+this.value; setFrame(frame);
   });
 
-  fetch('data/index.json').then(r=>r.json()).then(list=>{
-    const tabs=document.getElementById('tabs');
-    list.forEach((w,i)=>{
-      const b=document.createElement('button');
-      b.className='tab'+(i===0?' active':'');
-      b.textContent=`s${w.scene_id} · p${w.err_pct}`;
-      b.title=`error percentile p${w.err_pct} · ${w.rms_mm}×10⁻³ units`;
-      b.addEventListener('click',()=>{
-        tabs.querySelectorAll('.tab:not(.util)').forEach(x=>x.classList.remove('active'));
-        b.classList.add('active'); loadSet(w.name);
-      });
-      tabs.appendChild(b);
-    });
-    return loadSet(list[0].name);
-  }).then(()=>requestAnimationFrame(loop));
-  addEventListener('resize', render);
+  selectExp('8step').then(()=>requestAnimationFrame(loop));
 })();
 </script>
 </body>
