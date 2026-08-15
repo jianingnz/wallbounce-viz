@@ -1,0 +1,1 @@
+{"stages": [{"step": 7000, "label": "7000", "dir": "w16/stage_7000", "wall": {"ade_m": 0.11585, "fde_m": 0.17075, "pen": 0.22}, "floor": {"ade_m": 0.05003, "fde_m": 0.08007, "pen": 0.4972}, "free": {"ade_m": 0.04181, "fde_m": 0.07487, "pen": 0.7895}, "base_wall_ade_m": 3.68697}]}
