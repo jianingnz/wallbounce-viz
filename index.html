@@ -555,6 +555,10 @@
     const geo=new THREE.BufferGeometry();
     const pts=new THREE.Points(geo, new THREE.PointsMaterial({size:span()*0.028, map:sprite,
       vertexColors:true, transparent:true, alphaTest:0.35, depthWrite:true, sizeAttenuation:true}));
+    // positions stream per frame: the lazily-computed bounding sphere is stale
+    // (zero-filled buffer), so frustum culling wrongly hides the whole cloud
+    // when the camera zooms close. Never cull the animated points.
+    pts.frustumCulled=false;
     scene.add(pts);
     const boxGeo=new THREE.BoxGeometry(B[0][1]-B[0][0], B[1][1]-B[1][0], B[2][1]-B[2][0]);
     const walls=new THREE.Mesh(boxGeo, new THREE.MeshBasicMaterial({color:0x9db0c4,
