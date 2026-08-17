@@ -151,9 +151,12 @@
         <b>Validation error</b> = distance of the predicted ball's particles from the GT ball, in real
         meters (the box is 10 m wide, the ball Ø 0.7–1.4 m, moving ~0.3 m per frame). <b>live
         weights</b> = raw weights at that step; <b>EMA weights</b> = the exponential-moving-average copy
-        (decay 0.9999) that <code>best.pt</code>, all evals, and this viewer use. The 16-frames tab shows
+        (decay 0.9999) that <code>best.pt</code>, all evals, and this viewer use. The "· training" tabs show
         TRAINING PROGRESS: each stage is an intermediate checkpoint evaluated on the same val impact
         windows (pure-noise generation, strictest setting); pick a stage to watch the early model behave.
+        The Δt tabs are the timestep-aware simulators (implicit = time-RoPE only, explicit = +Δt input
+        channel), trained from scratch on mixed step sizes {42, 83, 167 ms} and evaluated here on the SAME
+        base protocol as the fixed model; the ⚖ compare tab overlays all three.
       </div>
     </div>
   </section>
@@ -185,8 +188,19 @@
     '8step':  {label:'8 frames',  curves:'data/curves.json', windows:'data/index.json',
                horizon:'data/horizon.json', best:19000, xmaxSteps:20000},
     '16step': {label:'16 frames · training', curves:'data/curves_16step.json',
-               stages:'data/16step_stages.json', best:null, xmaxSteps:100000},
+               stages:'data/16step_stages.json', best:null, xmaxSteps:100000,
+               progTitle:'Training progress — val ADE (meters) per checkpoint stage, 16-frame horizon'},
+    'dtI':    {label:'Δt implicit · training', curves:'data/curves_dtI.json',
+               stages:'data/dtI_stages.json', best:null, xmaxSteps:100000,
+               progTitle:'Δt-implicit training progress — val ADE (m) per stage, base protocol (16×42 ms)'},
+    'dtE':    {label:'Δt explicit · training', curves:'data/curves_dtE.json',
+               stages:'data/dtE_stages.json', best:null, xmaxSteps:100000,
+               progTitle:'Δt-explicit training progress — val ADE (m) per stage, base protocol (16×42 ms)'},
+    'compare':{label:'⚖ compare', compare:['16step','dtI','dtE'], xmaxSteps:100000},
   };
+  const CMP_STYLE = {'16step':{name:'fixed-Δt base', color:'var(--s1)'},
+                     'dtI':   {name:'Δt implicit',   color:'var(--s2)'},
+                     'dtE':   {name:'Δt explicit',   color:'var(--s3)'}};
   let curExp = '8step';
 
   // ---------------- generic log-scale line chart ----------------
@@ -288,15 +302,15 @@
        xlabel:s=>'predicted frame +'+s, dashed:new Set(['baseline·wall'])});
   }
 
-  function drawProgress16(st){
-    document.getElementById('hz_title').textContent =
+  function drawProgress16(st, exp){
+    document.getElementById('hz_title').textContent = (exp && exp.progTitle) ||
       'Training progress — val ADE (meters) per checkpoint stage, 16-frame horizon';
     document.getElementById('hz_legend').innerHTML = HZ_LEGEND;
     const rows = st.stages || [];
     if(!rows.length){ lineChart('chart_hz','tip_hz', [], {}); return; }
     const mk = (name, key, color) => ({name, color, dots:true,
       pts: rows.map(r => [r.step, r[key].ade_m])});
-    const xm = EXPS['16step'].xmaxSteps;
+    const xm = (exp && exp.xmaxSteps) || 100000;
     lineChart('chart_hz','tip_hz',
       [mk('wall','wall','var(--s1)'), mk('floor','floor','var(--s2)'),
        mk('free','free','var(--s3)'),
@@ -334,6 +348,35 @@
     if(list.length) loadSet(prefix + list[0].name);
   }
 
+  async function drawCompare(exp){
+    document.getElementById('hz_title').textContent =
+      'All three models — val wall-impact ADE (meters) per training stage, base protocol (16×42 ms)';
+    const series = [], notes = [];
+    for(const k of exp.compare){
+      try{
+        const st = await (await fetch(EXPS[k].stages + '?t=' + Date.now())).json();
+        const rows = st.stages || [];
+        if(rows.length){
+          series.push({name:CMP_STYLE[k].name, color:CMP_STYLE[k].color, dots:true,
+                       pts: rows.map(r=>[r.step, r.wall.ade_m])});
+          const last = rows[rows.length-1];
+          notes.push(`${CMP_STYLE[k].name} @${Math.round(last.step/1000)}k: ${(last.wall.ade_m*100).toFixed(1)} cm`);
+        }
+      }catch(e){}
+    }
+    document.getElementById('hz_legend').innerHTML = series.map(s =>
+      `<span><span class="chip" style="background:${s.color}"></span>${s.name}</span>`).join(' ');
+    const xm = exp.xmaxSteps;
+    lineChart('chart_hz','tip_hz', series,
+      {ylo:1e-3, yhi:10, ticks:[1e-3,1e-2,1e-1,1,10], fmt:M, tipfmt:Mtip,
+       xmax:xm, xticks:[0, xm/4, xm/2, 3*xm/4, xm], xstep:1000});
+    lineChart('chart_tr','tip_tr', [], {});
+    lineChart('chart_val','tip_val', [], {});
+    document.getElementById('meta').textContent = notes.length ?
+      'latest stages — ' + notes.join(' · ') :
+      'comparison fills in automatically as the three runs publish stages';
+  }
+
   async function selectExp(id){
     curExp = id;
     const exp = EXPS[id];
@@ -343,6 +386,7 @@
     document.getElementById('stagetabs').innerHTML = '';
     document.getElementById('tabs').innerHTML = '';
     state.curves = null;
+    if(exp.compare){ await drawCompare(exp); return; }
     try{
       state.curves = await (await fetch(exp.curves + '?t=' + Date.now())).json();
       drawLossCharts(state.curves, exp);
@@ -358,10 +402,10 @@
       let st = {stages:[]};
       try{ st = await (await fetch(exp.stages + '?t=' + Date.now())).json(); }catch(e){}
       state.stages = st;
-      drawProgress16(st);
+      drawProgress16(st, exp);
       if(!st.stages.length){
         document.getElementById('meta').textContent =
-          '16-frame run is training — stage checkpoints (1k, 2k, 5k, 10k, 20k, 40k, 70k, 100k steps) publish here automatically as training passes them';
+          exp.label.replace(' · training','') + ' is training — stage checkpoints (10k, 15k, 20k, 30k, 50k, 75k, 100k steps) publish here automatically as training passes them';
         return;
       }
       const pick = async (stg) => {
@@ -379,9 +423,10 @@
   }
   addEventListener('resize', () => {
     const exp = EXPS[curExp];
+    if(exp.compare){ drawCompare(exp); return; }
     if(state.curves) drawLossCharts(state.curves, exp);
     if(exp.windows && state.hz) drawHorizon8(state.hz);
-    if(!exp.windows && state.stages) drawProgress16(state.stages);
+    if(!exp.windows && state.stages) drawProgress16(state.stages, exp);
   });
   document.getElementById('curvebtn').addEventListener('click', function(){
     const hidden = document.getElementById('curves').classList.toggle('hidden');
