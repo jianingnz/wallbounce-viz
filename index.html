@@ -323,6 +323,7 @@
 
   // ---------------- experiment / stage / window tabs ----------------
   const state = { curves:null, hz:null, stages:null };
+  let stagePick = null;   // current experiment's stage-select handler (live refresh uses it)
 
   function setTabs(el, items, onpick, cls='tab'){
     el.innerHTML = '';
@@ -414,6 +415,7 @@
         document.getElementById('meta').textContent =
           `stage @ step ${stg.step}: wall ADE ${(stg.wall.ade_m*100).toFixed(1)} cm · floor ${(stg.floor.ade_m*100).toFixed(1)} cm · free ${(stg.free.ade_m*100).toFixed(1)} cm · wall pen ${(stg.wall.pen*100).toFixed(0)}%`;
       };
+      stagePick = pick;
       setTabs(document.getElementById('stagetabs'),
         st.stages.map((s,i)=>({text:'@'+(s.step>=1000? Math.round(s.step/100)/10+'k' : s.step),
                                active:i===st.stages.length-1, s})),
@@ -428,6 +430,35 @@
     if(exp.windows && state.hz) drawHorizon8(state.hz);
     if(!exp.windows && state.stages) drawProgress16(state.stages, exp);
   });
+
+  // live refresh: while the page is open, re-pull curves/stages every 2 min so
+  // new training stages appear without a reload (viewer selection untouched;
+  // stage tabs rebuild only when a new stage lands).
+  setInterval(async () => {
+    const exp = EXPS[curExp];
+    if(document.hidden) return;
+    try{
+      if(exp.compare){ await drawCompare(exp); return; }
+      if(exp.curves){
+        state.curves = await (await fetch(exp.curves + '?t=' + Date.now())).json();
+        drawLossCharts(state.curves, exp);
+      }
+      if(exp.stages){
+        const st = await (await fetch(exp.stages + '?t=' + Date.now())).json();
+        const had = (state.stages && state.stages.stages || []).length;
+        state.stages = st;
+        drawProgress16(st, exp);
+        if(st.stages.length !== had){
+          const actLbl = document.querySelector('#stagetabs .active');
+          const act = actLbl ? actLbl.textContent : null;
+          setTabs(document.getElementById('stagetabs'),
+            st.stages.map((s)=>({text:'@'+(s.step>=1000? Math.round(s.step/100)/10+'k' : s.step),
+                                 active:('@'+(s.step>=1000? Math.round(s.step/100)/10+'k' : s.step))===act, s})),
+            it => stagePick && stagePick(it.s), 'tab stage');
+        }
+      }
+    }catch(e){}
+  }, 120000);
   document.getElementById('curvebtn').addEventListener('click', function(){
     const hidden = document.getElementById('curves').classList.toggle('hidden');
     this.textContent = hidden ? 'curves ▸' : 'curves ▾';
@@ -520,10 +551,11 @@
   async function loadSet(name){
     document.getElementById('loading').style.display='flex';
     if(!cache[name]){
-      const meta = await (await fetch(`data/${name}/meta.json`)).json();
+      const v = '?t=' + Date.now();   // bust browser/CDN cache: stage dirs can be re-published in place
+      const meta = await (await fetch(`data/${name}/meta.json${v}`)).json();
       const [gtB, prB] = await Promise.all([
-        fetch(`data/${name}/gt.bin`).then(r=>r.arrayBuffer()),
-        fetch(`data/${name}/pred.bin`).then(r=>r.arrayBuffer()),
+        fetch(`data/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),
+        fetch(`data/${name}/pred.bin${v}`).then(r=>r.arrayBuffer()),
       ]);
       cache[name] = {meta, gt:new Float32Array(gtB), pred:new Float32Array(prB)};
     }
