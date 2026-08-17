@@ -116,7 +116,7 @@
     <div class="cgrid">
       <div class="chart-card">
         <div class="chead">
-          <span class="ctitle" id="tr_title">Training loss</span>
+          <span class="ctitle" id="tr_title">Training loss — denoising MSE per optimization step (log scale)</span>
           <span class="legend"><span><span class="chip" style="background:var(--s1)"></span>train (per 200 steps)</span></span>
         </div>
         <div class="chartwrap" id="wrap_tr">
@@ -126,7 +126,7 @@
       </div>
       <div class="chart-card">
         <div class="chead">
-          <span class="ctitle" id="val_title">Validation error (meters)</span>
+          <span class="ctitle" id="val_title">Val denoising loss → RMS meters — trend indicator, live vs EMA weights (not a rollout)</span>
           <span class="legend">
             <span><span class="chip" style="background:var(--s2)"></span>val error · live weights</span>
             <span><span class="chip" style="background:var(--s3)"></span>val error · EMA weights</span>
@@ -148,24 +148,31 @@
         </div>
       </div>
       <div class="cfoot" id="cnote">
-        <b>Validation error</b> = distance of the predicted ball's particles from the GT ball, in real
-        meters (the box is 10 m wide, the ball Ø 0.7–1.4 m, moving ~0.3 m per frame). <b>live
-        weights</b> = raw weights at that step; <b>EMA weights</b> = the exponential-moving-average copy
-        (decay 0.9999) that <code>best.pt</code>, all evals, and this viewer use. Model tabs show TRAINING
-        PROGRESS: each stage is an intermediate checkpoint evaluated on the same val impact windows
-        (pure-noise generation, strictest setting); pick a stage to watch the model mature. The Δt tabs are
-        the timestep-aware simulators (implicit = time-RoPE only, explicit = +Δt input channel), trained
-        from scratch on mixed step sizes {42, 83, 167 ms} and evaluated on the SAME base protocol as the
-        fixed model; the ⚖ compare tab overlays all three plus per-frame error curves.
-        <br><b>CAMPAIGN RESULTS (all runs complete, 100k steps each)</b> — final wall-impact ADE:
-        fixed base <b>2.4 cm</b> · Δt explicit <b>2.4 cm</b> · Δt implicit 3.3 cm. The explicit variant
-        matches the fixed model on its home protocol while simulating at ANY step size: across 42/83/125/167 ms
-        its error stays 1.8–2.5 cm, with the never-trained 125 ms interpolated cleanly, and one big 125 ms
-        step costs only ~40% more error than three chained 42 ms steps. Known gap: both Δt models are far
-        weaker on floor-impact / free-flight windows (17–46 cm vs base 1.3–1.6 cm) — root-caused to the
-        stride-budget sampler collapsing window starts (80% of training windows start at frame ≤2); a v2
-        sampler fix is designed. Overfit probe: single-frame post-impact prediction reaches 0.8 mm RMS on
-        seen impacts (3.5 mm unseen) — per-step capacity is not the bottleneck.
+        <b>HOW TO READ THE CHARTS.</b> All errors are real meters (box = 10 m wide, ball Ø 0.7–1.4 m,
+        ~0.3 m of motion per frame). Two kinds of numbers appear: <b>rollout errors</b> (stage chart,
+        per-frame chart, 3D viewer) — a frozen checkpoint generates all future frames from pure noise and
+        is scored against GT, the strictest protocol; and the <b>val-loss trend</b> (middle chart) — the
+        one-step denoising loss converted to meters, useful for convergence, not a rollout.
+        <b>live</b> = raw weights; <b>EMA</b> = the 0.9999-decay average that <code>best.pt</code>, all
+        evals, and this viewer use.
+        <br><b>WHAT EACH TAB IS.</b> "8 frames" and "16 frames · fixed Δt": fixed-rate models (every step
+        42 ms). "Δt implicit / explicit": timestep-conditioned simulators trained from scratch on mixed
+        step sizes {42, 83, 167 ms} — implicit feels Δt only through time-RoPE attention geometry;
+        explicit also receives log2(Δt) as an input channel. Both are evaluated on the SAME 16×42 ms val
+        windows as the fixed model, so every tab's numbers are directly comparable. "1-frame overfit
+        probe": capacity test, curves only. "⚖ compare": all three learning curves overlaid + the
+        per-frame error breakdown.
+        <br><b>FINAL RESULTS (100k steps each).</b> Wall-impact rollout ADE: fixed base <b>2.4 cm</b> ·
+        Δt explicit <b>2.4 cm</b> · Δt implicit 3.3 cm — the explicit variant matches the fixed model
+        while also simulating at any step size (1.8–2.5 cm across 42–167 ms; the never-trained 125 ms
+        interpolates cleanly; one 125 ms step ≈ three 42 ms steps +40% error at 3× fewer calls).
+        <br><b>KNOWN GAP.</b> Both Δt models are 10–30× worse on floor-impact and free-flight windows
+        (17–46 cm vs base 1.3–1.6 cm). Root cause (measured): the stride-budget sampler nearly always
+        binds, so 80% of their training windows start at frame ≤2 — they rarely saw mid-episode contexts.
+        A v2 sampler (span drawn first, then start, then strides) is designed to fix this.
+        <br><b>OVERFIT PROBE RESULT.</b> Single-frame post-impact prediction reaches 0.8 mm RMS on
+        memorized impacts and 3.5 mm on unseen scenes — per-step model capacity is not the bottleneck;
+        multi-frame error comes from the joint-generation task, not the physics step.
       </div>
     </div>
   </section>
@@ -198,13 +205,13 @@
                horizon:'data/horizon.json', best:19000, xmaxSteps:20000},
     '16step': {label:'16 frames · fixed Δt', curves:'data/curves_16step.json',
                stages:'data/16step_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'Fixed-Δt 16-frame — val ADE (meters) per checkpoint stage (COMPLETE: final wall ADE 2.4 cm)'},
+               progTitle:'True rollout error by training stage — frozen checkpoints generate 16 frames from noise on val impact windows; mean particle distance to GT in meters. FINAL: wall 2.4 cm'},
     'dtI':    {label:'Δt implicit', curves:'data/curves_dtI.json',
                stages:'data/dtI_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'Δt-implicit (time-RoPE only) — val ADE (m) per stage, base protocol (COMPLETE: final wall ADE 3.3 cm)'},
+               progTitle:'True rollout error by training stage — Δt-implicit checkpoints on the SAME val windows and 16×42 ms protocol as the fixed model. FINAL: wall 3.3 cm'},
     'dtE':    {label:'Δt explicit', curves:'data/curves_dtE.json',
                stages:'data/dtE_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'Δt-explicit (+log2 Δt channel) — val ADE (m) per stage, base protocol (COMPLETE: final wall ADE 2.4 cm)'},
+               progTitle:'True rollout error by training stage — Δt-explicit checkpoints on the SAME val windows and 16×42 ms protocol as the fixed model. FINAL: wall 2.4 cm'},
     'overfit':{label:'1-frame overfit probe', curves:'data/curves_overfit.json',
                best:null, xmaxSteps:100000,
                summary:'OVERFIT PROBE (complete): 1-frame post-impact prediction, NO augmentation, 100k steps ≈ 5,500 epochs over 1,156 impact clips. Result — memorization limit 0.8 mm RMS on seen impacts; 3.5 mm on unseen scenes; the augmented 20k run reached 8.2 mm. Single-step capacity is not a bottleneck.'},
@@ -364,9 +371,9 @@
   async function drawFrameCurves(){
     // per-frame error: which predicted frame do the errors come from?
     document.getElementById('tr_title').textContent =
-      'Error by predicted frame — per-slot RMS (meters), wall-impact windows, joint 16-frame prediction';
+      'Where the error comes from — per-frame RMS (m) at frames +1…+16 of one joint prediction, final checkpoints, WALL-impact windows';
     document.getElementById('val_title').textContent =
-      'Error by predicted frame — floor-impact windows';
+      'Where the error comes from — same per-frame breakdown on FLOOR-impact windows (exposes the Δt models’ floor gap)';
     let fc = null;
     try{ fc = await (await fetch('data/frame_curves.json?t=' + Date.now())).json(); }catch(e){}
     if(!fc || !fc.models){ lineChart('chart_tr','tip_tr',[],{}); lineChart('chart_val','tip_val',[],{}); return; }
@@ -390,13 +397,15 @@
   }
 
   function resetCardTitles(){
-    document.getElementById('tr_title').textContent = 'Training loss';
-    document.getElementById('val_title').textContent = 'Validation error (meters)';
+    document.getElementById('tr_title').textContent =
+      'Training loss — denoising MSE per optimization step (log scale)';
+    document.getElementById('val_title').textContent =
+      'Val denoising loss → RMS meters — trend indicator, live vs EMA weights (not a rollout)';
   }
 
   async function drawCompare(exp){
     document.getElementById('hz_title').textContent =
-      'All three models — val wall-impact ADE (meters) per training stage, base protocol (16×42 ms)';
+      'Head-to-head learning curves — wall-impact rollout ADE (m) of each model’s stages, identical protocol (16×42 ms, same val windows)';
     const series = [], notes = [];
     for(const k of exp.compare){
       try{
