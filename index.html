@@ -151,12 +151,21 @@
         <b>Validation error</b> = distance of the predicted ball's particles from the GT ball, in real
         meters (the box is 10 m wide, the ball Ø 0.7–1.4 m, moving ~0.3 m per frame). <b>live
         weights</b> = raw weights at that step; <b>EMA weights</b> = the exponential-moving-average copy
-        (decay 0.9999) that <code>best.pt</code>, all evals, and this viewer use. The "· training" tabs show
-        TRAINING PROGRESS: each stage is an intermediate checkpoint evaluated on the same val impact
-        windows (pure-noise generation, strictest setting); pick a stage to watch the early model behave.
-        The Δt tabs are the timestep-aware simulators (implicit = time-RoPE only, explicit = +Δt input
-        channel), trained from scratch on mixed step sizes {42, 83, 167 ms} and evaluated here on the SAME
-        base protocol as the fixed model; the ⚖ compare tab overlays all three.
+        (decay 0.9999) that <code>best.pt</code>, all evals, and this viewer use. Model tabs show TRAINING
+        PROGRESS: each stage is an intermediate checkpoint evaluated on the same val impact windows
+        (pure-noise generation, strictest setting); pick a stage to watch the model mature. The Δt tabs are
+        the timestep-aware simulators (implicit = time-RoPE only, explicit = +Δt input channel), trained
+        from scratch on mixed step sizes {42, 83, 167 ms} and evaluated on the SAME base protocol as the
+        fixed model; the ⚖ compare tab overlays all three plus per-frame error curves.
+        <br><b>CAMPAIGN RESULTS (all runs complete, 100k steps each)</b> — final wall-impact ADE:
+        fixed base <b>2.4 cm</b> · Δt explicit <b>2.4 cm</b> · Δt implicit 3.3 cm. The explicit variant
+        matches the fixed model on its home protocol while simulating at ANY step size: across 42/83/125/167 ms
+        its error stays 1.8–2.5 cm, with the never-trained 125 ms interpolated cleanly, and one big 125 ms
+        step costs only ~40% more error than three chained 42 ms steps. Known gap: both Δt models are far
+        weaker on floor-impact / free-flight windows (17–46 cm vs base 1.3–1.6 cm) — root-caused to the
+        stride-budget sampler collapsing window starts (80% of training windows start at frame ≤2); a v2
+        sampler fix is designed. Overfit probe: single-frame post-impact prediction reaches 0.8 mm RMS on
+        seen impacts (3.5 mm unseen) — per-step capacity is not the bottleneck.
       </div>
     </div>
   </section>
@@ -187,15 +196,18 @@
   const EXPS = {
     '8step':  {label:'8 frames',  curves:'data/curves.json', windows:'data/index.json',
                horizon:'data/horizon.json', best:19000, xmaxSteps:20000},
-    '16step': {label:'16 frames · training', curves:'data/curves_16step.json',
+    '16step': {label:'16 frames · fixed Δt', curves:'data/curves_16step.json',
                stages:'data/16step_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'Training progress — val ADE (meters) per checkpoint stage, 16-frame horizon'},
-    'dtI':    {label:'Δt implicit · training', curves:'data/curves_dtI.json',
+               progTitle:'Fixed-Δt 16-frame — val ADE (meters) per checkpoint stage (COMPLETE: final wall ADE 2.4 cm)'},
+    'dtI':    {label:'Δt implicit', curves:'data/curves_dtI.json',
                stages:'data/dtI_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'Δt-implicit training progress — val ADE (m) per stage, base protocol (16×42 ms)'},
-    'dtE':    {label:'Δt explicit · training', curves:'data/curves_dtE.json',
+               progTitle:'Δt-implicit (time-RoPE only) — val ADE (m) per stage, base protocol (COMPLETE: final wall ADE 3.3 cm)'},
+    'dtE':    {label:'Δt explicit', curves:'data/curves_dtE.json',
                stages:'data/dtE_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'Δt-explicit training progress — val ADE (m) per stage, base protocol (16×42 ms)'},
+               progTitle:'Δt-explicit (+log2 Δt channel) — val ADE (m) per stage, base protocol (COMPLETE: final wall ADE 2.4 cm)'},
+    'overfit':{label:'1-frame overfit probe', curves:'data/curves_overfit.json',
+               best:null, xmaxSteps:100000,
+               summary:'OVERFIT PROBE (complete): 1-frame post-impact prediction, NO augmentation, 100k steps ≈ 5,500 epochs over 1,156 impact clips. Result — memorization limit 0.8 mm RMS on seen impacts; 3.5 mm on unseen scenes; the augmented 20k run reached 8.2 mm. Single-step capacity is not a bottleneck.'},
     'compare':{label:'⚖ compare', compare:['16step','dtI','dtE'], xmaxSteps:100000},
   };
   const CMP_STYLE = {'16step':{name:'fixed-Δt base', color:'var(--s1)'},
@@ -432,6 +444,11 @@
       drawHorizon8(state.hz);
       const list = await (await fetch(exp.windows)).json();
       buildWindowTabs(list, '');
+    }else if(!exp.stages){
+      // curves-only experiment (e.g. the overfit probe): loss/val charts + summary
+      document.getElementById('hz_title').textContent = 'No rollout stages for this probe — see summary below';
+      lineChart('chart_hz','tip_hz', [], {});
+      document.getElementById('meta').textContent = exp.summary || '';
     }else{
       let st = {stages:[]};
       try{ st = await (await fetch(exp.stages + '?t=' + Date.now())).json(); }catch(e){}
