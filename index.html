@@ -50,6 +50,12 @@
   .legend{display:flex; gap:12px; font-size:11.5px; color:var(--soft); flex-wrap:wrap}
   .legend .chip{display:inline-block; width:14px; height:3px; border-radius:2px;
     margin-right:5px; vertical-align:middle}
+  #cmp_table table{width:100%; border-collapse:collapse; font-size:12.5px;
+    font-variant-numeric:tabular-nums; margin-top:4px}
+  #cmp_table th,#cmp_table td{text-align:right; padding:6px 10px;
+    border-bottom:1px solid var(--grid); white-space:nowrap}
+  #cmp_table th{color:var(--soft); font-weight:600; font-size:11.5px}
+  #cmp_table td:first-child,#cmp_table th:first-child{text-align:left; font-weight:650}
   .chartwrap{position:relative}
   .chartwrap svg{display:block; width:100%; height:250px}
   .ctip{position:absolute; pointer-events:none; display:none; background:rgba(255,255,255,.96);
@@ -136,6 +142,13 @@
           <div class="ctip" id="tip_val"></div>
         </div>
       </div>
+      <div class="chart-card" id="cmp_card" style="grid-column:1 / -1; display:none">
+        <div class="chead">
+          <span class="ctitle">Final results — 100k-step checkpoints, val set</span>
+          <span class="legend">ADE columns: 16×42 ms base protocol · Δt columns: matched 0.5 s horizon at that step size, wall windows</span>
+        </div>
+        <div id="cmp_table"></div>
+      </div>
       <div class="chart-card" id="hz_card" style="grid-column:1 / -1">
         <div class="chead">
           <span class="ctitle" id="hz_title">Val error over the horizon (meters)</span>
@@ -173,17 +186,15 @@
 <script>
 (function(){
   const EXPS = {
-    '8step':  {label:'8 frames',  curves:'data/curves.json', windows:'data/index.json',
-               horizon:'data/horizon.json', best:19000, xmaxSteps:20000},
     '16step': {label:'16 frames · fixed Δt', curves:'data/curves_16step.json',
                stages:'data/16step_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'True rollout error by training stage — frozen checkpoints generate 16 frames from noise on val impact windows; mean particle distance to GT in meters. FINAL: wall 2.4 cm'},
+               progTitle:'Rollout eval per stage — each checkpoint GENERATES the 16 frames; mean error vs GT (m)'},
     'dtI':    {label:'Δt implicit', curves:'data/curves_dtI.json',
                stages:'data/dtI_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'True rollout error by training stage — Δt-implicit checkpoints on the SAME val windows and 16×42 ms protocol as the fixed model. FINAL: wall 3.3 cm'},
+               progTitle:'Rollout eval per stage — Δt-implicit, same val windows and 16×42 ms protocol as the fixed model (m)'},
     'dtE':    {label:'Δt explicit', curves:'data/curves_dtE.json',
                stages:'data/dtE_stages.json', best:null, xmaxSteps:100000,
-               progTitle:'True rollout error by training stage — Δt-explicit checkpoints on the SAME val windows and 16×42 ms protocol as the fixed model. FINAL: wall 2.4 cm'},
+               progTitle:'Rollout eval per stage — Δt-explicit, same val windows and 16×42 ms protocol as the fixed model (m)'},
     'overfit':{label:'1-frame overfit probe', curves:'data/curves_overfit.json',
                best:null, xmaxSteps:100000,
                summary:'OVERFIT PROBE (complete): 1-frame post-impact prediction, NO augmentation, 100k steps ≈ 5,500 epochs over 1,156 impact clips. Result — memorization limit 0.8 mm RMS on seen impacts; 3.5 mm on unseen scenes; the augmented 20k run reached 8.2 mm. Single-step capacity is not a bottleneck.'},
@@ -192,7 +203,7 @@
   const CMP_STYLE = {'16step':{name:'fixed-Δt base', color:'var(--s1)'},
                      'dtI':   {name:'Δt implicit',   color:'var(--s2)'},
                      'dtE':   {name:'Δt explicit',   color:'var(--s3)'}};
-  let curExp = '8step';
+  let curExp = '16step';
 
   // ---------------- generic log-scale line chart ----------------
   function nearest(pts, s){ let b = pts[0];
@@ -296,7 +307,10 @@
   function drawProgress16(st, exp){
     document.getElementById('hz_title').textContent = (exp && exp.progTitle) ||
       'Training progress — val ADE (meters) per checkpoint stage, 16-frame horizon';
-    document.getElementById('hz_legend').innerHTML = HZ_LEGEND;
+    document.getElementById('hz_legend').innerHTML =
+      `<span><span class="chip" style="background:var(--s1)"></span>wall-impact windows</span>
+       <span><span class="chip" style="background:var(--s2)"></span>floor-impact</span>
+       <span><span class="chip" style="background:var(--s3)"></span>free flight</span>`;
     const rows = st.stages || [];
     if(!rows.length){ lineChart('chart_hz','tip_hz', [], {}); return; }
     const mk = (name, key, color) => ({name, color, dots:true,
@@ -304,12 +318,9 @@
     const xm = (exp && exp.xmaxSteps) || 100000;
     lineChart('chart_hz','tip_hz',
       [mk('wall','wall','var(--s1)'), mk('floor','floor','var(--s2)'),
-       mk('free','free','var(--s3)'),
-       {name:'baseline·wall', color:'var(--axis)',
-        pts: rows.map(r=>[r.step, r.base_wall_ade_m])}],
+       mk('free','free','var(--s3)')],
       {ylo:1e-3, yhi:10, ticks:[1e-3,1e-2,1e-1,1,10], fmt:M, tipfmt:Mtip,
-       xmax:xm, xticks:[0, xm/4, xm/2, 3*xm/4, xm], xstep:1000,
-       dashed:new Set(['baseline·wall'])});
+       xmax:xm, xticks:[0, xm/4, xm/2, 3*xm/4, xm], xstep:1000});
   }
 
   // ---------------- experiment / stage / window tabs ----------------
@@ -343,9 +354,9 @@
   async function drawFrameCurves(){
     // per-frame error: which predicted frame do the errors come from?
     document.getElementById('tr_title').textContent =
-      'Where the error comes from — per-frame RMS (m) at frames +1…+16 of one joint prediction, final checkpoints, WALL-impact windows';
+      'Per-frame error — WALL windows, frames +1…+16 (final checkpoints)';
     document.getElementById('val_title').textContent =
-      'Where the error comes from — same per-frame breakdown on FLOOR-impact windows (exposes the Δt models’ floor gap)';
+      'Per-frame error — FLOOR windows, frames +1…+16 (final checkpoints)';
     let fc = null;
     try{ fc = await (await fetch('data/frame_curves.json?t=' + Date.now())).json(); }catch(e){}
     if(!fc || !fc.models){ lineChart('chart_tr','tip_tr',[],{}); lineChart('chart_val','tip_val',[],{}); return; }
@@ -397,8 +408,9 @@
 
   async function drawCompare(exp){
     document.getElementById('hz_title').textContent =
-      'Head-to-head learning curves — wall-impact rollout ADE (m) of each model’s stages, identical protocol (16×42 ms, same val windows)';
-    const series = [], notes = [];
+      'Learning curves — wall-impact rollout ADE (m) per stage';
+    const series = [];
+    const finals = {};
     for(const k of exp.compare){
       try{
         const st = await (await fetch(EXPS[k].stages + '?t=' + Date.now())).json();
@@ -406,8 +418,7 @@
         if(rows.length){
           series.push({name:CMP_STYLE[k].name, color:CMP_STYLE[k].color, dots:true,
                        pts: rows.map(r=>[r.step, r.wall.ade_m])});
-          const last = rows[rows.length-1];
-          notes.push(`${CMP_STYLE[k].name} @${Math.round(last.step/1000)}k: ${(last.wall.ade_m*100).toFixed(1)} cm`);
+          finals[k] = rows.filter(r=>r.label==='final')[0] || rows[rows.length-1];
         }
       }catch(e){}
     }
@@ -418,9 +429,22 @@
       {ylo:1e-3, yhi:10, ticks:[1e-3,1e-2,1e-1,1,10], fmt:M, tipfmt:Mtip,
        xmax:xm, xticks:[0, xm/4, xm/2, 3*xm/4, xm], xstep:1000});
     await drawFrameCurves();
-    document.getElementById('meta').textContent = notes.length ?
-      'latest stages — ' + notes.join(' · ') :
-      'comparison fills in automatically as the three runs publish stages';
+    // results table: one row per model, base-protocol groups + per-Δt columns
+    const cm = v => v==null ? '—' : (v*100).toFixed(1);
+    let h = '<table><tr><th>model</th><th>wall ADE (cm)</th><th>floor ADE</th>'+
+            '<th>free ADE</th><th>wall pen%</th><th>Δt 42 ms</th><th>83 ms</th>'+
+            '<th>125 ms (never trained)</th><th>167 ms</th></tr>';
+    for(const k of exp.compare){
+      const f = finals[k];
+      if(!f) continue;
+      const s = f.strides_wall_ade_m || {};
+      h += `<tr><td>${CMP_STYLE[k].name}</td><td>${cm(f.wall.ade_m)}</td>`+
+           `<td>${cm(f.floor.ade_m)}</td><td>${cm(f.free.ade_m)}</td>`+
+           `<td>${Math.round(f.wall.pen*100)}%</td>`+
+           ['1','2','3','4'].map(i=>`<td>${s[i]!=null?cm(s[i]):'—'}</td>`).join('')+'</tr>';
+    }
+    document.getElementById('cmp_table').innerHTML = h + '</table>';
+    document.getElementById('meta').textContent = '';
   }
 
   async function selectExp(id){
@@ -436,6 +460,7 @@
     const probe = !exp.windows && !exp.stages && !exp.compare;
     for(const eid of ['hz_card','stage','controlsbar'])
       document.getElementById(eid).style.display = probe ? 'none' : '';
+    document.getElementById('cmp_card').style.display = exp.compare ? '' : 'none';
     if(exp.compare){ await drawCompare(exp); return; }
     resetCardTitles();
     try{
@@ -671,7 +696,7 @@
     frame=+this.value; setFrame(frame);
   });
 
-  selectExp('8step').then(()=>requestAnimationFrame(loop));
+  selectExp('16step').then(()=>requestAnimationFrame(loop));
 })();
 </script>
 </body>
