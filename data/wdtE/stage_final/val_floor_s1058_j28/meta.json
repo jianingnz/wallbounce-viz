@@ -1,0 +1,1 @@
+{"dataset": "MOVi-spheres wall-bounce \u00b7 val split \u00b7 FLOOR DEBUG window", "n_frames": 21, "n_particles": 128, "context_len": 5, "bounds": [[0.0, 1.0], [0.1, 0.9], [0.0, 1.0]], "split": "val", "body": "floor", "scene_id": 1058, "j": 28, "err_pct": 95, "rms_mm": 55.006}

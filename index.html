@@ -166,7 +166,10 @@
     <canvas id="c"></canvas>
     <div class="labels">
       <div class="vlabel" id="lbl-gt"><span class="swatch"></span>Ground truth</div>
-      <div class="vlabel" id="lbl-pred"><span class="swatch"></span>Prediction · jointly denoised</div>
+      <div class="vlabel" id="lbl-pred"><span class="swatch"></span>Prediction · jointly denoised
+        <button id="ovl" style="pointer-events:auto; margin-left:10px; font-size:11px; padding:2px 8px;
+          border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer">
+          + GT &amp; error vectors</button></div>
       <div class="divider"></div>
       <div class="hint">drag to orbit · scroll to zoom · both views share one camera</div>
     </div>
@@ -594,11 +597,26 @@
   }
   const V_gt=makeView(), V_pred=makeView();
 
+  // DEBUG OVERLAY (right pane): GT cloud in blue + a red line from every GT
+  // particle to its predicted twin — the per-particle error vectors.
+  let overlayOn=false;
+  const ovlGeo=new THREE.BufferGeometry();
+  const ovlPts=new THREE.Points(ovlGeo, new THREE.PointsMaterial({size:span()*0.018,
+    map:sprite, color:0x1f6feb, transparent:true, alphaTest:0.3, depthWrite:false,
+    sizeAttenuation:true}));
+  ovlPts.frustumCulled=false; ovlPts.visible=false; V_pred.scene.add(ovlPts);
+  const segGeo=new THREE.BufferGeometry();
+  const segs=new THREE.LineSegments(segGeo,
+    new THREE.LineBasicMaterial({color:0xd83a3a, transparent:true, opacity:0.9}));
+  segs.frustumCulled=false; segs.visible=false; V_pred.scene.add(segs);
+
   function allocBuffers(){
     for(const V of [V_gt,V_pred]){
       V.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3));
       V.geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N*3),3));
     }
+    ovlGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3));
+    segGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*2*3),3));
   }
 
   function adeFrame(f){
@@ -619,6 +637,17 @@
       V.geo.attributes.position.needsUpdate=true;
       heightColors(buf,f,V.geo.attributes.color.array);
       V.geo.attributes.color.needsUpdate=true;
+    }
+    if(overlayOn){
+      const o=f*N*3;
+      ovlGeo.attributes.position.array.set(cur.gt.subarray(o, o+N*3));
+      ovlGeo.attributes.position.needsUpdate=true;
+      const sp=segGeo.attributes.position.array;
+      for(let i=0;i<N;i++){
+        sp[i*6]  =cur.gt[o+i*3];   sp[i*6+1]=cur.gt[o+i*3+1];   sp[i*6+2]=cur.gt[o+i*3+2];
+        sp[i*6+3]=cur.pred[o+i*3]; sp[i*6+4]=cur.pred[o+i*3+1]; sp[i*6+5]=cur.pred[o+i*3+2];
+      }
+      segGeo.attributes.position.needsUpdate=true;
     }
     const isCtx = f < C;
     const ph=document.getElementById('phase');
@@ -679,6 +708,14 @@
     renderer.setViewport(0,0,half,h); renderer.setScissor(0,0,half,h); renderer.render(V_gt.scene,camera);
     renderer.setViewport(half,0,w-half,h); renderer.setScissor(half,0,w-half,h); renderer.render(V_pred.scene,camera);
   }
+
+  document.getElementById('ovl').addEventListener('click', function(){
+    overlayOn=!overlayOn;
+    ovlPts.visible=segs.visible=overlayOn;
+    this.style.background = overlayOn ? 'var(--pred)' : '#fff';
+    this.style.color = overlayOn ? '#fff' : '';
+    if(cur) setFrame(frame);
+  });
 
   let frame=0, playing=true, last=0; const FPS=3;
   if(matchMedia('(prefers-reduced-motion: reduce)').matches) playing=false;
