@@ -44,15 +44,14 @@
   #curves{flex:none; background:var(--panel); border-bottom:1px solid var(--line);
     padding:10px 18px 8px}
   #curves.hidden{display:none}
-  .cgrid{display:grid; grid-template-columns:1fr 1fr; gap:8px 26px}
-  @media(max-width:900px){ .cgrid{grid-template-columns:1fr} }
+  .cgrid{display:grid; grid-template-columns:1fr; gap:14px}  /* stacked: each chart full width */
   .chart-card .chead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:2px}
   .chart-card .ctitle{font-size:12.5px; font-weight:650}
   .legend{display:flex; gap:12px; font-size:11.5px; color:var(--soft); flex-wrap:wrap}
   .legend .chip{display:inline-block; width:14px; height:3px; border-radius:2px;
     margin-right:5px; vertical-align:middle}
   .chartwrap{position:relative}
-  .chartwrap svg{display:block; width:100%; height:160px}
+  .chartwrap svg{display:block; width:100%; height:250px}
   .ctip{position:absolute; pointer-events:none; display:none; background:rgba(255,255,255,.96);
     border:1px solid var(--line); border-radius:7px; padding:5px 9px; font-size:11px;
     font-family:ui-monospace,Menlo,monospace; color:var(--ink); line-height:1.5;
@@ -208,7 +207,7 @@
     if(!series.length || !series[0].pts.length){ svg.innerHTML =
       `<text x="20" y="40" font-size="12" fill="var(--soft)">no data yet — publishes automatically as training progresses</text>`;
       return; }
-    const W = Math.max(svg.clientWidth, 320), H = 160, L = 52, R = 14, T = 8, B = 22;
+    const W = Math.max(svg.clientWidth, 320), H = 250, L = 52, R = 14, T = 8, B = 22;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     const X = s => L + (W-L-R) * ((s-xmin) / (xmax-xmin));
     const Y = v => T + (H-T-B) * (1 - (Math.log10(Math.max(v,ylo)) - Math.log10(ylo))
