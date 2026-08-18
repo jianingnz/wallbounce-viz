@@ -147,33 +147,6 @@
           <div class="ctip" id="tip_hz"></div>
         </div>
       </div>
-      <div class="cfoot" id="cnote">
-        <b>HOW TO READ THE CHARTS.</b> All errors are real meters (box = 10 m wide, ball Ø 0.7–1.4 m,
-        ~0.3 m of motion per frame). Two kinds of numbers appear: <b>rollout errors</b> (stage chart,
-        per-frame chart, 3D viewer) — a frozen checkpoint generates all future frames from pure noise and
-        is scored against GT, the strictest protocol; and the <b>val-loss trend</b> (middle chart) — the
-        one-step denoising loss converted to meters, useful for convergence, not a rollout.
-        <b>live</b> = raw weights; <b>EMA</b> = the 0.9999-decay average that <code>best.pt</code>, all
-        evals, and this viewer use.
-        <br><b>WHAT EACH TAB IS.</b> "8 frames" and "16 frames · fixed Δt": fixed-rate models (every step
-        42 ms). "Δt implicit / explicit": timestep-conditioned simulators trained from scratch on mixed
-        step sizes {42, 83, 167 ms} — implicit feels Δt only through time-RoPE attention geometry;
-        explicit also receives log2(Δt) as an input channel. Both are evaluated on the SAME 16×42 ms val
-        windows as the fixed model, so every tab's numbers are directly comparable. "1-frame overfit
-        probe": capacity test, curves only. "⚖ compare": all three learning curves overlaid + the
-        per-frame error breakdown.
-        <br><b>FINAL RESULTS (100k steps each).</b> Wall-impact rollout ADE: fixed base <b>2.4 cm</b> ·
-        Δt explicit <b>2.4 cm</b> · Δt implicit 3.3 cm — the explicit variant matches the fixed model
-        while also simulating at any step size (1.8–2.5 cm across 42–167 ms; the never-trained 125 ms
-        interpolates cleanly; one 125 ms step ≈ three 42 ms steps +40% error at 3× fewer calls).
-        <br><b>KNOWN GAP.</b> Both Δt models are 10–30× worse on floor-impact and free-flight windows
-        (17–46 cm vs base 1.3–1.6 cm). Root cause (measured): the stride-budget sampler nearly always
-        binds, so 80% of their training windows start at frame ≤2 — they rarely saw mid-episode contexts.
-        A v2 sampler (span drawn first, then start, then strides) is designed to fix this.
-        <br><b>OVERFIT PROBE RESULT.</b> Single-frame post-impact prediction reaches 0.8 mm RMS on
-        memorized impacts and 3.5 mm on unseen scenes — per-step model capacity is not the bottleneck;
-        multi-frame error comes from the joint-generation task, not the physics step.
-      </div>
     </div>
   </section>
 
