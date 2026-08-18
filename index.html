@@ -369,18 +369,22 @@
   }
 
   function drawProbe(exp){
-    // overfit probe layout: ONLY two charts — training loss (left) and
-    // train-set eval error (right). No stage chart, no description, no viewer.
+    // overfit probe layout: ONLY two charts — training loss (with EMA) and
+    // train-set eval error. No stage chart, no description, no viewer.
     document.getElementById('tr_title').textContent =
       'Training loss — denoising MSE per step on the TRAIN set (log scale)';
     document.getElementById('val_title').textContent =
       'Train-set eval error — generated rollout RMS (meters) on SEEN impacts';
-    const te = (state.curves && state.curves.train_eval_m) || [];
+    const cv = state.curves || {};
+    const xm = exp.xmaxSteps, xt = [0, xm/4, xm/2, 3*xm/4, xm];
+    const trSeries = [{name:'train', color:'var(--s1)', pts:cv.train_loss || []}];
+    if(cv.train_loss_ema)
+      trSeries.push({name:'train·EMA', color:'var(--s3)', pts:cv.train_loss_ema});
+    lineChart('chart_tr','tip_tr', trSeries, {xmax:xm, xticks:xt});
     lineChart('chart_val','tip_val',
-      [{name:'train-set rollout', color:'var(--s2)', pts:te, dots:true}],
+      [{name:'train-set rollout', color:'var(--s2)', pts:cv.train_eval_m || []}],
       {ylo:1e-4, yhi:1, ticks:[1e-4,1e-3,1e-2,1e-1,1], fmt:M, tipfmt:Mtip,
-       xmax:exp.xmaxSteps, xticks:[0,exp.xmaxSteps/4,exp.xmaxSteps/2,3*exp.xmaxSteps/4,exp.xmaxSteps],
-       xstep:1000});
+       xmax:xm, xticks:xt, xstep:1000});
     document.getElementById('meta').textContent = '';
   }
 
