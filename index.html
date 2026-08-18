@@ -145,7 +145,8 @@
       <div class="chart-card" id="cmp_card" style="grid-column:1 / -1; display:none">
         <div class="chead">
           <span class="ctitle">Final results — 100k-step checkpoints, val set</span>
-          <span class="legend">ADE columns: 16×42 ms base protocol · Δt columns: matched 0.5 s horizon at that step size, wall windows</span>
+          <span class="legend">ADE columns: 16×42 ms base protocol · Δt columns: matched 0.5 s horizon at that step size, wall windows.
+            The fixed model has no Δt input — its 83/125/167 ms cells show what happens when it is run off its native clock (it always emits 42 ms-sized steps).</span>
         </div>
         <div id="cmp_table"></div>
       </div>
