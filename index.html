@@ -457,7 +457,7 @@
     setTabs(document.getElementById('exptabs'),
       Object.entries(EXPS).map(([k,e])=>({text:e.label, active:k===id, k})),
       it => selectExp(it.k), 'tab exp');
-    { const a=document.createElement('a'); a.href='dt.html'; a.className='tab exp';
+    { const a=document.createElement('a'); a.href='dt.html?v=2'; a.className='tab exp';
       a.textContent='Δt study ↗'; a.style.textDecoration='none'; a.style.display='inline-block';
       document.getElementById('exptabs').appendChild(a); }
     document.getElementById('stagetabs').innerHTML = '';
