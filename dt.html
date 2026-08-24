@@ -9,7 +9,7 @@
   *{box-sizing:border-box}
   body{margin:0; background:var(--bg); color:var(--ink);
        font-family:"Source Serif Pro",Georgia,"Times New Roman",serif; line-height:1.5}
-  .wrap{max-width:1080px; margin:0 auto; padding:32px 24px 60px}
+  .wrap{max-width:1180px; margin:0 auto; padding:32px 24px 60px}
   h1{font-size:26px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em}
   .sub{color:var(--soft); font-size:15px; margin:0 0 22px}
   h2{font-size:17px; font-weight:600; margin:28px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px}
@@ -19,75 +19,61 @@
   th,td{padding:6px 10px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums}
   th{font-weight:600; color:var(--soft); font-size:13px}
   td:first-child,th:first-child{text-align:left}
-  tr.active td{background:#f3f5f8}
   .caption{font-size:13px; color:var(--soft); margin:4px 0 0}
-  .tabs{display:flex; gap:6px; flex-wrap:wrap; margin:10px 0}
-  .tab{font:inherit; font-size:14px; padding:6px 14px; border:1px solid var(--line); background:#fff;
-       cursor:pointer; border-radius:3px}
-  .tab.active{background:var(--ink); color:#fff; border-color:var(--ink)}
   .ex{display:flex; gap:4px; flex-wrap:wrap; margin:6px 0 10px}
   .ex button{font:inherit; font-size:12.5px; padding:4px 9px; border:1px solid var(--line); background:#fff;
              cursor:pointer; border-radius:3px; font-variant-numeric:tabular-nums}
-  .ex button.active{background:#f3f5f8; border-color:#999}
-  #stage{position:relative; height:440px; border:1px solid var(--line); background:#fafafa}
+  .ex button.active{background:var(--ink); color:#fff; border-color:var(--ink)}
+  #stage{position:relative; height:620px; border:1px solid var(--line); background:#fafafa}
   canvas{display:block; width:100%; height:100%}
-  .lbl{position:absolute; top:8px; font-size:13px; color:var(--soft); pointer-events:none}
-  .lbl.l{left:12px} .lbl.r{left:calc(50% + 12px)}
+  .lbl{position:absolute; font-size:13px; pointer-events:none; line-height:1.3;
+       background:rgba(255,255,255,.85); padding:3px 7px; border-radius:3px}
+  .lbl b{font-weight:600} .lbl .m{color:var(--soft); font-family:ui-monospace,Menlo,monospace; font-size:11.5px}
   .ctl{display:flex; align-items:center; gap:12px; margin-top:8px; font-size:13px; color:var(--soft)}
   .ctl input[type=range]{flex:1}
   .ctl button{font:inherit; padding:2px 10px; border:1px solid var(--line); background:#fff; cursor:pointer; border-radius:3px}
   .mono{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; color:var(--ink)}
-  .pred{color:var(--pred)}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Timestep-conditioned particle prediction</h1>
-  <p class="sub">One trained model, queried at four different simulation step sizes. MOVi-spheres wall-bounce, held-out validation scenes. <a href="index.html">← back to the training viewer</a></p>
+  <p class="sub">The same wall-bounce event, predicted at four different simulation step sizes by one model. MOVi-spheres, held-out validation scenes. <a href="index.html">← back to the training viewer</a></p>
 
   <h2>1. Setup</h2>
-  <p>Every window gives the model 5 ground-truth context frames at the native 42 ms rate and asks it to generate the future from pure noise up to a matched physical horizon of ≈0.67 s. The <em>fixed-Δt</em> model can only step at 42 ms (16 steps). The <em>implicit-Δt</em> model takes the step durations as input (encoded through time-aware rotary attention) and is queried at 42, 84, 125 and 167 ms — so it reaches the same instant in 16, 8, 5 or 4 steps. 125 ms never occurred in training. Windows are wall-impact events: the first predicted step contains the ball–wall contact. Error = mean particle distance to ground truth over the horizon (ADE), in real meters (box width 10 m, ball Ø 0.7–1.4 m).</p>
+  <p>Each example gives the models 5 ground-truth context frames at the native 42 ms rate; the future is then generated from pure noise up to a matched physical horizon of ≈0.67 s. The <em>fixed-Δt</em> model can only step at 42 ms (16 steps). The <em>implicit-Δt</em> model receives the step durations as input — encoded through time-aware rotary attention — and is queried at 42, 84, 125 and 167 ms, reaching the same instant in 16, 8, 5 or 4 steps; 125 ms never occurred in training. All panes below play on one physical clock (10× slow motion): coarse settings advance in fewer, longer strides and arrive at the same moment. Error = mean particle distance to ground truth over the horizon (ADE), real meters (box width 10 m, ball Ø 0.7–1.4 m).</p>
 
-  <h2>2. Results (100 wall-impact windows per setting)</h2>
+  <h2>2. Results (100 wall-impact windows)</h2>
   <table id="summary"></table>
-  <p class="caption">Table 1. Mean / median ADE per setting. Click a row or tab to load its examples.</p>
+  <p class="caption">Table 1. Mean / median ADE per setting over the full validation set.</p>
 
-  <h2>3. Examples — best to worst</h2>
-  <div class="tabs" id="tabs"></div>
+  <h2>3. Examples — the same window under every setting, best to worst</h2>
   <div class="ex" id="ex"></div>
-  <div id="stage">
-    <canvas id="c"></canvas>
-    <div class="lbl l">ground truth</div>
-    <div class="lbl r pred">prediction</div>
-  </div>
+  <table id="extable"></table>
+  <p class="caption" id="excap"></p>
+  <div id="stage"><canvas id="c"></canvas><div id="labels"></div></div>
   <div class="ctl">
     <button id="play">❚❚</button>
-    <input type="range" id="scrub" min="0" max="1" value="0" step="1">
-    <span class="mono" id="frame">0 / 0</span>
-    <span class="mono" id="phase">context</span>
-    <span class="mono" id="ade">ADE — m</span>
+    <input type="range" id="scrub" min="0" max="1000" value="0" step="1">
+    <span class="mono" id="clock">t = 0 ms</span>
   </div>
-  <p class="caption" id="excap">Playback is paced to physical time (10× slow motion): a 167 ms step is held four times longer than a 42 ms step. Drag to orbit, scroll to zoom; both panes share one camera.</p>
+  <p class="caption">Ranked by the implicit model's 42 ms ADE. Drag to orbit, scroll to zoom; all six panes share one camera. Top row: ground truth · fixed-Δt model · implicit @42 ms. Bottom row: implicit @84 · @125 · @167 ms.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 (function(){
-  const LEGS = [
-    ['fixed42','fixed-Δt model · 42 ms'],
-    ['dti42','implicit-Δt · 42 ms'],
-    ['dti84','implicit-Δt · 84 ms'],
-    ['dti125','implicit-Δt · 125 ms (never trained)'],
-    ['dti167','implicit-Δt · 167 ms'],
+  const PANES = [
+    ['gt','ground truth',null], ['fixed42','fixed-Δt model · 42 ms',0xc1440e], ['dti42','implicit-Δt · 42 ms',0xc1440e],
+    ['dti84','implicit-Δt · 84 ms',0xc1440e], ['dti125','implicit-Δt · 125 ms (never trained)',0xc1440e], ['dti167','implicit-Δt · 167 ms',0xc1440e],
   ];
-  const SLOW = 10;
-  let summary = {}, curLeg = null, curList = [], cur = null;
+  const LABEL = {fixed42:'fixed-Δt model · 42 ms', dti42:'implicit-Δt · 42 ms', dti84:'implicit-Δt · 84 ms',
+                 dti125:'implicit-Δt · 125 ms (never trained)', dti167:'implicit-Δt · 167 ms'};
+  const SLOW = 10, COLS = 3, ROWS = 2;
   const cm = v => (v*100).toFixed(1)+' cm';
+  let meta=null, bufs={}, N=128, C=5, NAT=1000/24, tEnd=1000;
 
-  // ---------- viewer ----------
-  let T=21, N=128, C=5, B=[[0,1],[0.1,0.9],[0,1]], dtMs=1000/24;
-  const cx=()=>0.5, cy=()=>0.5, cz=()=>0.5, span=()=>1;
   function disc(){ const s=64, cv=document.createElement('canvas'); cv.width=cv.height=s;
     const g=cv.getContext('2d'); const rg=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
     rg.addColorStop(0,'rgba(255,255,255,1)'); rg.addColorStop(.5,'rgba(255,255,255,.95)'); rg.addColorStop(1,'rgba(255,255,255,0)');
@@ -96,98 +82,119 @@
   function makeView(color){
     const scene=new THREE.Scene(); scene.background=new THREE.Color('#fafafa');
     const geo=new THREE.BufferGeometry();
-    const pts=new THREE.Points(geo, new THREE.PointsMaterial({size:0.028, map:sprite, color,
+    const pts=new THREE.Points(geo, new THREE.PointsMaterial({size:0.03, map:sprite, color:color||0x1f4e9c,
       transparent:true, alphaTest:0.35, depthWrite:true, sizeAttenuation:true}));
     pts.frustumCulled=false; scene.add(pts);
     const boxGeo=new THREE.BoxGeometry(1,0.8,1);
-    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo),
-      new THREE.LineBasicMaterial({color:0x888888, transparent:true, opacity:0.6}));
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), new THREE.LineBasicMaterial({color:0x888888, transparent:true, opacity:0.6}));
     edges.position.set(0.5,0.5,0.5); scene.add(edges);
     const grid=new THREE.GridHelper(1, 10, 0xbbbbbb, 0xdddddd); grid.position.set(0.5,0.1,0.5); scene.add(grid);
     return {scene, geo};
   }
-  const V_gt=makeView(0x1f4e9c), V_pred=makeView(0xc1440e);
-  function alloc(){ for(const V of [V_gt,V_pred]) V.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3)); }
-  function adeFrame(f){ let s=0; for(let i=0;i<N;i++){ const o=(f*N+i)*3;
-    const dx=cur.pred[o]-cur.gt[o], dy=cur.pred[o+1]-cur.gt[o+1], dz=cur.pred[o+2]-cur.gt[o+2];
-    s+=Math.sqrt(dx*dx+dy*dy+dz*dz);} return s/N; }
-  let frame=0, playing=true, last=0;
-  function setFrame(f){
-    if(!cur) return; frame=f;
-    for(const [V,buf] of [[V_gt,cur.gt],[V_pred,cur.pred]]){
-      V.geo.attributes.position.array.set(buf.subarray(f*N*3, f*N*3+N*3)); V.geo.attributes.position.needsUpdate=true; }
-    const ctx=f<C;
-    document.getElementById('phase').textContent = ctx ? `context ${f+1}/${C}` : `predicted +${(f-C+1)} (${Math.round((f-C+1)*dtMs)} ms)`;
-    document.getElementById('frame').textContent = `${f+1} / ${T}`;
-    document.getElementById('scrub').value=f;
-    document.getElementById('ade').textContent = ctx ? 'ADE — m' : 'ADE '+(adeFrame(f)*10).toFixed(3)+' m';
+  const views = PANES.map(([k,,col]) => makeView(col));
+  function alloc(){ for(const V of views) V.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3)); }
+
+  // frame index of a pane at physical time t (ms): context frames at native rate, then that setting's strides
+  function frameAt(key, t){
+    const tA=(C-1)*NAT;
+    if(t < tA) return Math.min(C-1, Math.floor(t/NAT));
+    if(key==='gt') return Math.min(meta.gt_frames-1, C-1+Math.floor((t-tA)/NAT));
+    const s=meta.settings[key];
+    return Math.min(s.n_frames-1, C-1+Math.floor((t-tA)/s.dt_ms));
+  }
+  function nativeIndexOf(key, f){            // the GT frame index matching a pane's frame f
+    if(key==='gt' || f<C) return f;
+    const s=meta.settings[key]; return C-1+Math.round((f-C+1)*s.dt_ms/NAT);
+  }
+  function adeAt(key, f){
+    const g=bufs.gt, p=bufs[key], gi=nativeIndexOf(key,f);
+    if(gi>=meta.gt_frames) return null;
+    let s=0; for(let i=0;i<N;i++){ const o=(f*N+i)*3, og=(gi*N+i)*3;
+      const dx=p[o]-g[og], dy=p[o+1]-g[og+1], dz=p[o+2]-g[og+2]; s+=Math.sqrt(dx*dx+dy*dy+dz*dz); }
+    return s/N*10;
+  }
+  let tNow=0, playing=true, last=0;
+  function setTime(t){
+    if(!meta) return; tNow=t;
+    PANES.forEach(([key], i)=>{
+      const f=frameAt(key,t); const buf=bufs[key];
+      views[i].geo.attributes.position.array.set(buf.subarray(f*N*3, f*N*3+N*3));
+      views[i].geo.attributes.position.needsUpdate=true;
+      const el=document.getElementById('lbl_'+key);
+      if(el){ const ctx=f<C; const a = key==='gt'||ctx ? null : adeAt(key,f);
+        el.querySelector('.m').textContent = ctx ? `context ${f+1}/${C}` :
+          (key==='gt' ? `frame +${f-C+1}` : `step ${f-C+1}/${meta.settings[key].steps} · err ${a==null?'—':a.toFixed(3)+' m'}`); }
+    });
+    document.getElementById('scrub').value=Math.round(t);
+    document.getElementById('clock').textContent=`t = ${Math.round(t)} ms`;
   }
   const canvas=document.getElementById('c');
   const renderer=new THREE.WebGLRenderer({canvas, antialias:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setScissorTest(true);
-  const camera=new THREE.PerspectiveCamera(42,1,0.01,100);
-  camera.position.set(1.55, 1.0, 1.75);
+  const camera=new THREE.PerspectiveCamera(42,1,0.01,100); camera.position.set(1.45,0.95,1.65);
   const controls=new THREE.OrbitControls(camera, canvas);
   controls.target.set(0.5,0.5,0.5); controls.enableDamping=true; controls.dampingFactor=0.08;
   controls.minDistance=0.05; controls.maxDistance=10;
-  function render(){
-    const w=canvas.clientWidth, h=canvas.clientHeight, half=Math.floor(w/2); if(!w||!h) return;
-    const pr=renderer.getPixelRatio();
-    if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)) renderer.setSize(w,h,false);
-    camera.aspect=half/h; camera.updateProjectionMatrix();
-    renderer.setViewport(0,0,half,h); renderer.setScissor(0,0,half,h); renderer.render(V_gt.scene,camera);
-    renderer.setViewport(half,0,w-half,h); renderer.setScissor(half,0,w-half,h); renderer.render(V_pred.scene,camera);
+  function layoutLabels(){
+    const st=document.getElementById('stage'), W=st.clientWidth, H=st.clientHeight;
+    const pw=W/COLS, ph=H/ROWS; const box=document.getElementById('labels');
+    if(!box.children.length){ PANES.forEach(([key,label])=>{ const d=document.createElement('div'); d.className='lbl'; d.id='lbl_'+key;
+      d.innerHTML=`<b>${label}</b><br><span class="m"></span>`; box.appendChild(d); }); }
+    PANES.forEach(([key],i)=>{ const el=document.getElementById('lbl_'+key);
+      el.style.left=(i%COLS)*pw+8+'px'; el.style.top=Math.floor(i/COLS)*ph+8+'px'; });
   }
-  function loop(t){
+  function render(){
+    const w=canvas.clientWidth, h=canvas.clientHeight; if(!w||!h) return;
+    const pr=renderer.getPixelRatio();
+    if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)){ renderer.setSize(w,h,false); layoutLabels(); }
+    const pw=Math.floor(w/COLS), ph=Math.floor(h/ROWS);
+    camera.aspect=pw/ph; camera.updateProjectionMatrix();
+    views.forEach((V,i)=>{ const x=(i%COLS)*pw, y=(ROWS-1-Math.floor(i/COLS))*ph;
+      renderer.setViewport(x,y,pw,ph); renderer.setScissor(x,y,pw,ph); renderer.render(V.scene,camera); });
+  }
+  function loop(ts){
     controls.update();
-    const hold = (frame<C ? 1000/24 : dtMs) * SLOW;    // physical-time pacing
-    if(playing && cur && t-last>hold){ setFrame((frame+1)%T); last=t; }
+    if(playing && meta){ if(!last) last=ts; const dt=(ts-last)/SLOW; last=ts;
+      let t=tNow+dt; if(t>tEnd+250) t=0; setTime(t); } else last=ts;
     render(); requestAnimationFrame(loop);
   }
   document.getElementById('play').onclick=function(){ playing=!playing; this.textContent=playing?'❚❚':'▶'; };
-  document.getElementById('scrub').oninput=function(){ playing=false; document.getElementById('play').textContent='▶'; setFrame(+this.value); };
+  document.getElementById('scrub').oninput=function(){ playing=false; document.getElementById('play').textContent='▶'; setTime(+this.value); };
 
-  // ---------- data ----------
-  async function loadExample(leg, name){
+  async function loadExample(name){
     const v='?t='+Date.now();
-    const meta=await (await fetch(`data/dtstudy/${leg}/${name}/meta.json${v}`)).json();
-    const [g,p]=await Promise.all([fetch(`data/dtstudy/${leg}/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),
-                                   fetch(`data/dtstudy/${leg}/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
-    cur={meta, gt:new Float32Array(g), pred:new Float32Array(p)};
-    T=meta.n_frames; N=meta.n_particles; C=meta.context_len; dtMs=meta.dt_ms;
-    alloc(); document.getElementById('scrub').max=T-1;
-    document.getElementById('excap').innerHTML =
-      `Example ${meta.rank}/10 (p${meta.pct} of the error distribution) · scene ${meta.scene_id}, impact at transition ${meta.j}→${meta.j+1} · `+
-      `${meta.steps} steps × ${Math.round(meta.dt_ms)} ms · window ADE <b>${cm(meta.ade_m)}</b>, final-frame error ${cm(meta.fde_m)}. `+
-      `Playback paced to physical time (${SLOW}× slow motion).`;
-    setFrame(0); playing=true; document.getElementById('play').textContent='❚❚';
-  }
-  function renderExamples(){
-    const ex=document.getElementById('ex'); ex.innerHTML='';
-    curList.forEach((w,i)=>{ const b=document.createElement('button');
-      b.textContent=`#${w.rank} · ${cm(w.ade_m)}`; b.className=i===0?'active':'';
-      b.onclick=()=>{ ex.querySelectorAll('button').forEach(x=>x.className=''); b.className='active'; loadExample(curLeg, w.name); };
-      ex.appendChild(b); });
-  }
-  async function selectLeg(leg){
-    curLeg=leg;
-    document.querySelectorAll('#tabs .tab').forEach(b=>b.classList.toggle('active', b.dataset.leg===leg));
-    document.querySelectorAll('#summary tr').forEach(r=>r.classList.toggle('active', r.dataset.leg===leg));
-    curList=await (await fetch(`data/dtstudy/${leg}/index.json?t=`+Date.now())).json();
-    renderExamples(); if(curList.length) loadExample(leg, curList[0].name);
+    meta=await (await fetch(`data/dtstudy/${name}/meta.json${v}`)).json();
+    N=meta.n_particles; C=meta.context_len; NAT=meta.native_dt_ms;
+    const keys=['gt', ...Object.keys(meta.settings)];
+    const arrs=await Promise.all(keys.map(k=>fetch(`data/dtstudy/${name}/${k}.bin${v}`).then(r=>r.arrayBuffer())));
+    bufs={}; keys.forEach((k,i)=>bufs[k]=new Float32Array(arrs[i]));
+    alloc();
+    tEnd=(C-1)*NAT + Math.max(...Object.values(meta.settings).map(s=>s.steps*s.dt_ms));
+    document.getElementById('scrub').max=Math.round(tEnd);
+    let h='<tr><th>setting</th><th>steps × Δt</th><th>window ADE</th><th>final-frame error</th></tr>';
+    for(const [k,s] of Object.entries(meta.settings))
+      h+=`<tr><td>${LABEL[k]}</td><td>${s.steps} × ${Math.round(s.dt_ms)} ms</td><td>${cm(s.ade_m)}</td><td>${cm(s.fde_m)}</td></tr>`;
+    document.getElementById('extable').innerHTML=h;
+    document.getElementById('excap').textContent=
+      `Example ${meta.rank}/10 (p${meta.pct} of the implicit@42 ms error distribution) · scene ${meta.scene_id}, wall impact in transition ${meta.j}→${meta.j+1}.`;
+    setTime(0); playing=true; last=0; document.getElementById('play').textContent='❚❚';
   }
   async function init(){
-    summary=await (await fetch('data/dtstudy/summary.json?t='+Date.now())).json();
+    const summary=await (await fetch('data/dtstudy/summary.json?t='+Date.now())).json();
     let h='<tr><th>model · step size</th><th>steps</th><th>horizon</th><th>mean ADE</th><th>median ADE</th></tr>';
-    const tabs=document.getElementById('tabs');
-    for(const [leg,label] of LEGS){ const s=summary[leg]; if(!s) continue;
-      h+=`<tr data-leg="${leg}" style="cursor:pointer" onclick="window.__sel('${leg}')"><td>${label}</td><td>${s.steps}</td><td>${s.horizon_s.toFixed(2)} s</td><td>${cm(s.mean_ade_m)}</td><td>${cm(s.median_ade_m)}</td></tr>`;
-      const b=document.createElement('button'); b.className='tab'; b.dataset.leg=leg; b.textContent=label; b.onclick=()=>selectLeg(leg); tabs.appendChild(b); }
+    for(const k of ['fixed42','dti42','dti84','dti125','dti167']){ const s=summary[k]; if(!s) continue;
+      h+=`<tr><td>${LABEL[k]}</td><td>${s.steps}</td><td>${s.horizon_s.toFixed(2)} s</td><td>${cm(s.mean_ade_m)}</td><td>${cm(s.median_ade_m)}</td></tr>`; }
     document.getElementById('summary').innerHTML=h;
-    window.__sel=selectLeg;
-    await selectLeg('dti42');
+    const idx=await (await fetch('data/dtstudy/index.json?t='+Date.now())).json();
+    const ex=document.getElementById('ex');
+    idx.forEach((w,i)=>{ const b=document.createElement('button'); b.textContent=`#${w.rank} · ${cm(w.ade_dti42_m)}`;
+      b.className=i===0?'active':''; b.onclick=()=>{ ex.querySelectorAll('button').forEach(x=>x.className=''); b.className='active'; loadExample(w.name); };
+      ex.appendChild(b); });
+    layoutLabels();
+    if(idx.length) await loadExample(idx[0].name);
     requestAnimationFrame(loop);
   }
+  addEventListener('resize', layoutLabels);
   init();
 })();
 </script>

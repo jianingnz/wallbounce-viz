@@ -1,1 +1,0 @@
-{"n_frames": 21, "n_particles": 128, "context_len": 5, "bounds": [[0.0, 1.0], [0.1, 0.9], [0.0, 1.0]], "dt_ms": 41.666666666666664, "steps": 16, "scene_id": 1029, "j": 13, "ade_m": 0.02317, "fde_m": 0.04064, "rank": 5, "pct": 44}
