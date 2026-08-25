@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Research meetings — particle world model</title>
+<style>
+  :root{--ink:#1a1a1a; --soft:#666; --line:#e2e2e2; --accent:#2a4d8f; --bg:#fff}
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+       font-family:"Source Serif Pro",Georgia,"Times New Roman",serif; line-height:1.55; font-size:16px}
+  .layout{display:grid; grid-template-columns:220px 1fr; min-height:100vh}
+  nav{border-right:1px solid var(--line); padding:28px 18px; position:sticky; top:0; height:100vh; overflow:auto}
+  nav h1{font-size:15px; font-weight:600; margin:0 0 4px; letter-spacing:.01em}
+  nav .who{font-size:12.5px; color:var(--soft); margin-bottom:18px}
+  nav .lbl{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--soft); margin:14px 0 6px}
+  nav a{display:block; padding:6px 8px; border-radius:4px; color:var(--ink); text-decoration:none; font-size:14px}
+  nav a small{display:block; color:var(--soft); font-size:12px}
+  nav a.active{background:#eef2f9; color:var(--accent); font-weight:600}
+  main{padding:40px 56px 80px; max-width:860px}
+  main h1{font-size:28px; font-weight:600; margin:0 0 2px; letter-spacing:-.01em}
+  main .date{color:var(--soft); font-size:14px; margin-bottom:28px}
+  main h2{font-size:20px; font-weight:600; margin:34px 0 10px; padding-bottom:4px; border-bottom:1px solid var(--line)}
+  main h3{font-size:16.5px; font-weight:600; margin:22px 0 6px}
+  main p, main li{font-size:16px}
+  main p{margin:8px 0 12px}
+  main ul, main ol{padding-left:22px}
+  main li{margin:4px 0}
+  main code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; background:#f4f4f4; padding:1px 5px; border-radius:3px}
+  main pre{background:#f7f7f7; border:1px solid var(--line); border-radius:4px; padding:12px 14px;
+           font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13.5px; line-height:1.5; overflow-x:auto}
+  main table{border-collapse:collapse; margin:10px 0 14px; font-size:15px}
+  main th, main td{padding:6px 12px; border-bottom:1px solid var(--line); text-align:left; font-variant-numeric:tabular-nums}
+  main th{font-weight:600; color:var(--soft); font-size:13.5px}
+  main .note{border-left:3px solid var(--accent); background:#f7f9fd; padding:10px 14px; margin:14px 0; font-size:15px}
+  main .eq{margin:12px 0 12px 24px; font-family:"Cambria Math","STIX Two Math",Georgia,serif; font-size:17px}
+  main .toc{font-size:14px; color:var(--soft); margin:0 0 22px}
+  main .toc a{color:var(--accent); text-decoration:none; margin-right:14px}
+  @media(max-width:760px){ .layout{grid-template-columns:1fr} nav{position:static; height:auto; border-right:0; border-bottom:1px solid var(--line)} main{padding:24px 20px} }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav>
+    <h1>Research meetings</h1>
+    <div class="who">Particle world model · notes for advisor meetings</div>
+    <div class="lbl">Meetings</div>
+    <div id="tabs"></div>
+  </nav>
+  <main id="main">loading…</main>
+</div>
+<script>
+(async function(){
+  const idx = await (await fetch('meetings.json?t=' + Date.now())).json();
+  const tabs = document.getElementById('tabs');
+  const main = document.getElementById('main');
+  async function show(m){
+    tabs.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.id === m.id));
+    main.innerHTML = await (await fetch(`notes/${m.file}?t=` + Date.now())).text();
+    history.replaceState(null, '', '#' + m.id);
+    window.scrollTo(0, 0);
+  }
+  idx.meetings.forEach(m => {
+    const a = document.createElement('a'); a.href = '#' + m.id; a.dataset.id = m.id;
+    a.innerHTML = `${m.date}<small>${m.title}</small>`;
+    a.onclick = e => { e.preventDefault(); show(m); };
+    tabs.appendChild(a);
+  });
+  const want = location.hash.slice(1);
+  show(idx.meetings.find(m => m.id === want) || idx.meetings[idx.meetings.length - 1]);
+})();
+</script>
+</body>
+</html>

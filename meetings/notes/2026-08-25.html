@@ -1,0 +1,58 @@
+<h1>Temporal RoPE: making the simulator aware of real time</h1>
+<div class="date">Meeting 1 · 2026-08-25</div>
+<div class="toc"><a href="#s1">1 Problem</a><a href="#s2">2 Standard RoPE</a><a href="#s3">3 Time-RoPE</a><a href="#s4">4 Worked example</a><a href="#s5">5 Design decisions</a><a href="#s6">6 What it enables</a><a href="#s7">7 Summary</a></div>
+
+<h2 id="s1">1. The problem</h2>
+<p>Our particle simulator predicts the next frames of a point cloud from a few context frames. The original model was trained on data recorded at one fixed frame rate (42 ms per step for the MOVi wall-bounce scenes, 2.5 ms for the Genesis MPM scenes). Nothing in the architecture ever received the step duration as input — the model simply learned "one step" to mean "one recording frame." Consequently it can only ever simulate at that one rate: asked to take an 84 ms step, it still produces 42 ms worth of motion, and the error grows 40–60×.</p>
+<p>Goal: one model, queried with an arbitrary step size Δt, that simulates the right amount of physics for that Δt — including step sizes it never saw in training.</p>
+
+<h2 id="s2">2. Standard RoPE (what the model already had)</h2>
+<p>The temporal attention blocks use rotary position embeddings. Each attention head's query and key vectors (dimension <i>d</i> = 64) are split into <i>d</i>/2 two-dimensional pairs. Pair <i>j</i> has a fixed frequency from a geometric ladder,</p>
+<div class="eq">θ<sub>j</sub> = base<sup>−2j/d</sup>,&nbsp;&nbsp; j = 0 … d/2−1&nbsp;&nbsp;(θ<sub>0</sub> = 1: fast; θ<sub>31</sub> ≈ 10<sup>−4</sup>: slow)</div>
+<p>Before the dot product, the pair belonging to frame <i>k</i> is rotated by the angle θ<sub>j</sub>·p<sub>k</sub>, where p<sub>k</sub> is that frame's <em>position index</em>. The key property is that a dot product of two rotated vectors depends only on the difference of their angles:</p>
+<div class="eq">⟨R(θ<sub>j</sub>p<sub>q</sub>) q, R(θ<sub>j</sub>p<sub>k</sub>) k⟩ = ⟨q, R(θ<sub>j</sub>(p<sub>k</sub> − p<sub>q</sub>)) k⟩</div>
+<p>So attention never sees absolute positions — only the <em>gaps</em> between them, viewed simultaneously at 32 frequency scales. In the original model the index was simply the frame ordinal, p<sub>k</sub> = k = 0, 1, 2, …, shared by every sample in the batch.</p>
+<div class="note">Because every transition in the data lasted exactly one frame, "index" was implicitly "elapsed time in units of one frame." The model was time-aware by accident, for one clock rate, and had no way to be told otherwise.</div>
+
+<h2 id="s3">3. Time-RoPE (the change)</h2>
+<p>We replace the ordinal index by <strong>cumulative physical time</strong>, measured in units of a fixed reference step Δt<sub>ref</sub>:</p>
+<div class="eq">p<sub>k</sub> = Σ<sub>i ≤ k</sub> Δt<sub>i</sub> / Δt<sub>ref</sub></div>
+<p>where Δt<sub>i</sub> is the real duration of transition <i>i</i> (the loader attaches one such number per transition of each window). The rotation, the frequency ladder, the weights — everything else is untouched. Two consequences:</p>
+<ul>
+  <li><strong>The phase gap between consecutive frames now equals the step duration</strong> (in Δt<sub>ref</sub> units). An 84 ms step under Δt<sub>ref</sub> = 42 ms is a gap of 2; a 167 ms step is a gap of 4. Attention feels "how far apart in time" rather than "how many frames apart."</li>
+  <li><strong>Positions are floats and per-sample.</strong> Each batch element carries its own stride pattern, so the cos/sin tables are computed per sample rather than once. Fractional durations (a 2 ms step with Δt<sub>ref</sub> = 2.5 ms → 0.8) are fine.</li>
+</ul>
+<p>The Δt information enters the network <em>only</em> through this geometry — no explicit Δt feature. (An "explicit" variant that additionally appends log<sub>2</sub>(Δt/Δt<sub>ref</sub>) as an input channel was also trained; it is a separate discussion.)</p>
+<p>Two companion changes make the encoding usable. The prediction target becomes <strong>velocity</strong> (displacement / Δt) instead of displacement, so one normalizer is valid at every step size (velocity magnitudes vary only 0.5–8 % across strides, whereas displacements would clip 68 % of samples at 4× stride). Positions are then rebuilt as x<sub>k+1</sub> = x<sub>k</sub> + v<sub>k</sub>·Δt<sub>k</sub>. And the training data is re-windowed with <strong>mixed strides</strong>: each transition of a window independently draws Δt ∈ {1, 2, 4} × frame, with stride 3 (125 ms in wall-bounce) held out entirely as an interpolation probe.</p>
+
+<h2 id="s4">4. Worked example</h2>
+<p>Δt<sub>ref</sub> = 42 ms. A window whose four transitions last [42, 167, 83, 42] ms:</p>
+<table>
+<tr><th>frame k</th><th>reached by</th><th>Δt<sub>k</sub>/Δt<sub>ref</sub></th><th>p<sub>k</sub> (cumsum)</th><th>phase gap to previous</th></tr>
+<tr><td>0</td><td>—</td><td>—</td><td>0</td><td>—</td></tr>
+<tr><td>1</td><td>42 ms step</td><td>1</td><td>1</td><td>1</td></tr>
+<tr><td>2</td><td>167 ms step</td><td>4</td><td>5</td><td>4</td></tr>
+<tr><td>3</td><td>83 ms step</td><td>2</td><td>7</td><td>2</td></tr>
+<tr><td>4</td><td>42 ms step</td><td>1</td><td>8</td><td>1</td></tr>
+</table>
+<p>Compare with the original encoding, which would have given p = 0, 1, 2, 3, 4 regardless of the durations. Two batches, one with frames 1 s apart and one 2 s apart, would have been indistinguishable; under time-RoPE their positions are 23.8, 47.6, … versus 47.6, 95.2, … — every gap twice as large, at every frequency.</p>
+
+<h2 id="s5">5. Design decisions worth defending</h2>
+<h3>5.1 Why divide by Δt<sub>ref</sub> rather than use raw seconds</h3>
+<p>Dividing all durations by one global constant is a change of units; it loses nothing (every ratio and difference is preserved, and raw seconds are recoverable by multiplying back). It is done for numerical conditioning: RoPE's frequency ladder resolves gaps of order 1 up to the window length. Raw seconds would put a 42 ms step at 0.042 — a 2.4° rotation on the fastest pair and no rotation at all on the slower ones — cramming the signal into one or two dimensions per head. Choosing Δt<sub>ref</sub> = one native frame keeps a typical step near 1, where the ladder was designed to work, and it does so for datasets whose native rates differ by 17× without retuning anything.</p>
+<p>Δt<sub>ref</sub> is a per-model hyperparameter fixed at training time (42 ms wall-bounce, 2.5 ms Genesis) and stored in the checkpoint; inference must use the same value. What the weights learn is "a phase gap of 1 means this much physics," so changing the constant later would silently time-dilate the simulation. The <em>query</em> (the Δt values themselves) is free; the <em>unit</em> is not.</p>
+<h3>5.2 Inclusive cumulative sum (end-of-step stamping)</h3>
+<p>Frame <i>k</i>'s position includes its own transition's duration (i ≤ k, not i &lt; k). Temporal attention is causal: a frame cannot attend forward. With an exclusive sum, frame 2 in the example would sit at position 1, and its own 167 ms duration would only appear in frame 3's position — invisible to the token that must predict across it. Inclusive stamping places each step's duration exactly where the prediction needs it: in the phase gap to its predecessor.</p>
+<h3>5.3 The original model is an exact special case</h3>
+<p>At uniform stride 1 the cumulative sum is 1, 2, 3, … — the original 0, 1, 2, … shifted by a constant. Relative-phase attention cannot see a constant shift, so the outputs are identical. Verified numerically: loading the fixed-Δt model's weights into the time-RoPE architecture and feeding uniform-stride input reproduces its outputs to 1.2 × 10<sup>−7</sup>. The generalization strictly contains the original model, which also made warm-starting from it valid.</p>
+
+<h2 id="s6">6. What it enables (numbers on the companion pages)</h2>
+<ul>
+  <li><strong>One model, any step size.</strong> Wall-bounce, held-out scenes, matched 0.5 s horizon, wall-impact windows: the implicit model holds 2.5–3.0 cm ADE across 42, 84, 125 and 167 ms steps; the fixed model asked for the same steps degrades to 82–138 cm.</li>
+  <li><strong>Interpolation to unseen Δt.</strong> 125 ms was never in training and performs indistinguishably from its trained neighbors — the model learned a continuous function of the phase gap, not three discrete modes.</li>
+  <li><strong>Big steps are nearly free.</strong> One 125 ms step versus three chained 42 ms steps to the same instant: +0–40 % error at 3× fewer model calls.</li>
+  <li><strong>Transfers to a real MPM simulator.</strong> On Genesis rigid-body data at 2.5 ms, the same story replicates at millimeter scale (0.7–3.5 mm across 2.5–10 ms steps, 7.5 ms held out); a Genesis sand (true MPM particle) run at 2048 points is in progress.</li>
+</ul>
+
+<h2 id="s7">7. Summary</h2>
+<p>RoPE already computes attention as a function of index differences. We changed the indices from "number of frames elapsed" to "amount of time elapsed," in a fixed unit. That single substitution upgrades those differences from frame counts to physical durations, turning the step size into a first-class, continuously encoded input — with no new weights, no new features, and the original fixed-rate model preserved exactly as the uniform-stride special case.</p>
