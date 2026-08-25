@@ -1,3 +1,6 @@
 {"meetings": [
-  {"id": "2026-08-25", "date": "2026-08-25", "title": "Temporal RoPE for Δt-conditioned simulation", "file": "2026-08-25.html"}
+  {"id": "2026-08-25", "date": "2026-08-25", "items": [
+    {"label": "Δt study", "src": "../dt.html"},
+    {"label": "Horizon rollout", "src": "../rollout.html"}
+  ]}
 ]}

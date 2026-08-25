@@ -19,7 +19,10 @@
   nav a small{display:block; color:var(--soft); font-size:12px}
   nav a.active{background:#eef2f9; color:var(--accent); font-weight:600}
   main{padding:28px 32px 60px}
-  main iframe{width:100%; height:calc(100vh - 120px); border:1px solid var(--line); border-radius:4px; background:#fff}
+  .subtabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px}
+  .subtabs button{font:inherit; font-size:14px; padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:3px; cursor:pointer}
+  .subtabs button.active{background:var(--ink); color:#fff; border-color:var(--ink)}
+  main iframe{width:100%; height:calc(100vh - 100px); border:1px solid var(--line); border-radius:4px; background:#fff}
   main h1{font-size:28px; font-weight:600; margin:0 0 2px; letter-spacing:-.01em}
   main .date{color:var(--soft); font-size:14px; margin-bottom:28px}
   main h2{font-size:20px; font-weight:600; margin:34px 0 10px; padding-bottom:4px; border-bottom:1px solid var(--line)}
@@ -53,15 +56,21 @@
   const idx = await (await fetch('meetings.json?t=' + Date.now())).json();
   const tabs = document.getElementById('tabs');
   const main = document.getElementById('main');
-  async function show(m){
+  function show(m){
     tabs.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.id === m.id));
-    main.innerHTML = await (await fetch(`notes/${m.file}?t=` + Date.now())).text();
+    main.innerHTML = '<div class="subtabs" id="subtabs"></div><iframe id="viz" title=""></iframe>';
+    const sub = document.getElementById('subtabs'), fr = document.getElementById('viz');
+    const pick = (it, i) => { sub.querySelectorAll('button').forEach((b, j) => b.classList.toggle('active', j === i));
+                              fr.src = it.src; fr.title = it.label; };
+    (m.items || []).forEach((it, i) => { const b = document.createElement('button'); b.textContent = it.label;
+                                        b.onclick = () => pick(it, i); sub.appendChild(b); });
+    if (m.items && m.items.length) pick(m.items[0], 0);
     history.replaceState(null, '', '#' + m.id);
     window.scrollTo(0, 0);
   }
   idx.meetings.forEach(m => {
     const a = document.createElement('a'); a.href = '#' + m.id; a.dataset.id = m.id;
-    a.innerHTML = `${m.date}<small>${m.title}</small>`;
+    a.textContent = m.date;
     a.onclick = e => { e.preventDefault(); show(m); };
     tabs.appendChild(a);
   });
