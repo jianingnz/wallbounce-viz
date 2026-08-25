@@ -1,6 +1,22 @@
-{"meetings": [
-  {"id": "2026-08-25", "date": "2026-08-25", "items": [
-    {"label": "Δt study", "src": "../dt.html"},
-    {"label": "Horizon rollout", "src": "../rollout.html"}
-  ]}
-]}
+{
+ "meetings": [
+  {
+   "id": "2026-08-25",
+   "date": "2026-08-25",
+   "items": [
+    {
+     "label": "Δt study",
+     "src": "../dt.html"
+    },
+    {
+     "label": "Horizon rollout",
+     "src": "../rollout.html"
+    },
+    {
+     "label": "Training data",
+     "src": "../videos.html"
+    }
+   ]
+  }
+ ]
+}
