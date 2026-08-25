@@ -1,202 +1,83 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<title>Timestep-conditioned prediction — Δt study</title>
-<style>
-  :root{--ink:#111; --soft:#555; --line:#ddd; --gt:#1f4e9c; --pred:#c1440e; --bg:#fff}
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--ink);
-       font-family:"Source Serif Pro",Georgia,"Times New Roman",serif; line-height:1.5}
-  .wrap{max-width:1180px; margin:0 auto; padding:32px 24px 60px}
-  h1{font-size:26px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em}
-  .sub{color:var(--soft); font-size:15px; margin:0 0 22px}
-  h2{font-size:17px; font-weight:600; margin:28px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px}
-  p{margin:6px 0 10px; font-size:15px}
-  a{color:var(--gt)}
-  table{border-collapse:collapse; font-size:14px; margin:8px 0 4px; width:100%}
-  th,td{padding:6px 10px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums}
-  th{font-weight:600; color:var(--soft); font-size:13px}
-  td:first-child,th:first-child{text-align:left}
-  .caption{font-size:13px; color:var(--soft); margin:4px 0 0}
-  .ex{display:flex; gap:4px; flex-wrap:wrap; margin:6px 0 10px}
-  .ex button{font:inherit; font-size:12.5px; padding:4px 9px; border:1px solid var(--line); background:#fff;
-             cursor:pointer; border-radius:3px; font-variant-numeric:tabular-nums}
-  .ex button.active{background:var(--ink); color:#fff; border-color:var(--ink)}
-  #stage{position:relative; height:620px; border:1px solid var(--line); background:#fafafa}
-  canvas{display:block; width:100%; height:100%}
-  .lbl{position:absolute; font-size:13px; pointer-events:none; line-height:1.3;
-       background:rgba(255,255,255,.85); padding:3px 7px; border-radius:3px}
-  .lbl b{font-weight:600} .lbl .m{color:var(--soft); font-family:ui-monospace,Menlo,monospace; font-size:11.5px}
-  .ctl{display:flex; align-items:center; gap:12px; margin-top:8px; font-size:13px; color:var(--soft)}
-  .ctl input[type=range]{flex:1}
-  .ctl button{font:inherit; padding:2px 10px; border:1px solid var(--line); background:#fff; cursor:pointer; border-radius:3px}
-  .mono{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; color:var(--ink)}
-</style>
+<title>Δt study</title>
+<link rel="stylesheet" href="site.css">
+<style>#stage{height:620px}</style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Timestep-conditioned particle prediction</h1>
-  <p class="sub">The same wall-bounce event, predicted at four different simulation step sizes by one model. MOVi-spheres, held-out validation scenes. <a href="index.html">← back to the training viewer</a></p>
-
-  <h2>1. Setup</h2>
-  <p>Each example gives the models 5 ground-truth context frames at the native 42 ms rate; the future is then generated from pure noise up to a matched physical horizon of ≈0.67 s. The <em>fixed-Δt</em> model can only step at 42 ms (16 steps). The <em>implicit-Δt</em> model receives the step durations as input — encoded through time-aware rotary attention — and is queried at 42, 84, 125 and 167 ms, reaching the same instant in 16, 8, 5 or 4 steps; 125 ms never occurred in training. All panes below play on one physical clock (10× slow motion): coarse settings advance in fewer, longer strides and arrive at the same moment. Error = mean particle distance to ground truth over the horizon (ADE), real meters (box width 10 m, ball Ø 0.7–1.4 m).</p>
-
-  <h2>2. Results (100 wall-impact windows)</h2>
+  <h2 style="margin-top:0">All 100 validation windows</h2>
   <table id="summary"></table>
-  <p class="caption">Table 1. Mean / median ADE per setting over the full validation set.</p>
-
-  <h2>3. Examples — the same window under every setting, best to worst</h2>
+  <h2>One window under every setting</h2>
   <div class="ex" id="ex"></div>
   <table id="extable"></table>
-  <p class="caption" id="excap"></p>
-  <div id="stage"><canvas id="c"></canvas><div id="labels"></div></div>
+  <div id="stage" style="margin-top:12px"><canvas id="c"></canvas><div id="labels"></div></div>
   <div class="ctl">
-    <button id="play">❚❚</button>
+    <button id="play">Pause</button>
     <input type="range" id="scrub" min="0" max="1000" value="0" step="1">
     <span class="mono" id="clock">t = 0 ms</span>
+    <button id="ovl">GT → prediction vectors</button>
   </div>
-  <p class="caption">Ranked by the implicit model's 42 ms ADE. Drag to orbit, scroll to zoom; all six panes share one camera. Top row: ground truth · fixed-Δt model · implicit @42 ms. Bottom row: implicit @84 · @125 · @167 ms.</p>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js"></script>
 <script>
 (function(){
-  const PANES = [
-    ['gt','ground truth',null], ['fixed42','fixed-Δt model · 42 ms',0xc1440e], ['dti42','implicit-Δt · 42 ms',0xc1440e],
-    ['dti84','implicit-Δt · 84 ms',0xc1440e], ['dti125','implicit-Δt · 125 ms (never trained)',0xc1440e], ['dti167','implicit-Δt · 167 ms',0xc1440e],
-  ];
-  const LABEL = {fixed42:'fixed-Δt model · 42 ms', dti42:'implicit-Δt · 42 ms', dti84:'implicit-Δt · 84 ms',
-                 dti125:'implicit-Δt · 125 ms (never trained)', dti167:'implicit-Δt · 167 ms'};
-  const SLOW = 10, COLS = 3, ROWS = 2;
-  const cm = v => (v*100).toFixed(1)+' cm';
-  let meta=null, bufs={}, N=128, C=5, NAT=1000/24, tEnd=1000;
-
-  function disc(){ const s=64, cv=document.createElement('canvas'); cv.width=cv.height=s;
-    const g=cv.getContext('2d'); const rg=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
-    rg.addColorStop(0,'rgba(255,255,255,1)'); rg.addColorStop(.5,'rgba(255,255,255,.95)'); rg.addColorStop(1,'rgba(255,255,255,0)');
-    g.fillStyle=rg; g.beginPath(); g.arc(s/2,s/2,s/2,0,7); g.fill(); return new THREE.CanvasTexture(cv); }
-  const sprite=disc();
-  function makeView(color){
-    const scene=new THREE.Scene(); scene.background=new THREE.Color('#fafafa');
-    const geo=new THREE.BufferGeometry();
-    const pts=new THREE.Points(geo, new THREE.PointsMaterial({size:0.03, map:sprite, color:color||0x1f4e9c,
-      transparent:true, alphaTest:0.35, depthWrite:true, sizeAttenuation:true}));
-    pts.frustumCulled=false; scene.add(pts);
-    const boxGeo=new THREE.BoxGeometry(1,0.8,1);
-    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo), new THREE.LineBasicMaterial({color:0x888888, transparent:true, opacity:0.6}));
-    edges.position.set(0.5,0.5,0.5); scene.add(edges);
-    const grid=new THREE.GridHelper(1, 10, 0xbbbbbb, 0xdddddd); grid.position.set(0.5,0.1,0.5); scene.add(grid);
-    return {scene, geo};
-  }
-  const views = PANES.map(([k,,col]) => makeView(col));
-  function alloc(){ for(const V of views) V.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3)); }
-
-  // frame index of a pane at physical time t (ms): context frames at native rate, then that setting's strides
-  function frameAt(key, t){
-    const tA=(C-1)*NAT;
-    if(t < tA) return Math.min(C-1, Math.floor(t/NAT));
-    if(key==='gt') return Math.min(meta.gt_frames-1, C-1+Math.floor((t-tA)/NAT));
-    const s=meta.settings[key];
-    return Math.min(s.n_frames-1, C-1+Math.floor((t-tA)/s.dt_ms));
-  }
-  function nativeIndexOf(key, f){            // the GT frame index matching a pane's frame f
-    if(key==='gt' || f<C) return f;
-    const s=meta.settings[key]; return C-1+Math.round((f-C+1)*s.dt_ms/NAT);
-  }
-  function adeAt(key, f){
-    const g=bufs.gt, p=bufs[key], gi=nativeIndexOf(key,f);
-    if(gi>=meta.gt_frames) return null;
-    let s=0; for(let i=0;i<N;i++){ const o=(f*N+i)*3, og=(gi*N+i)*3;
-      const dx=p[o]-g[og], dy=p[o+1]-g[og+1], dz=p[o+2]-g[og+2]; s+=Math.sqrt(dx*dx+dy*dy+dz*dz); }
-    return s/N*10;
-  }
+  const PANES=[['gt','ground truth'],['fixed42','fixed-Δt model · 42 ms'],['dti42','implicit-Δt · 42 ms'],['dti84','implicit-Δt · 84 ms'],['dti125','implicit-Δt · 125 ms (never trained)'],['dti167','implicit-Δt · 167 ms']];
+  const LABEL=Object.fromEntries(PANES.slice(1)); const SLOW=10, COLS=3, ROWS=2;
+  const cm=v=>(v*100).toFixed(1)+' cm';
+  let meta=null, bufs={}, N=128, C=5, NAT=1000/24, tEnd=1000, ovOn=false;
+  const sprite=vizDisc();
+  function makeView(color){ const scene=new THREE.Scene(); scene.background=new THREE.Color('#f5f5f7'); const geo=new THREE.BufferGeometry();
+    const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.03,map:sprite,color,transparent:true,alphaTest:0.35,depthWrite:true,sizeAttenuation:true})); pts.frustumCulled=false; scene.add(pts);
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,0.8,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7})); edges.position.set(0.5,0.5,0.5); scene.add(edges);
+    const grid=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea); grid.position.set(0.5,0.1,0.5); scene.add(grid); return {scene,geo}; }
+  const views=PANES.map(([k])=>makeView(k==='gt'?0x0a84ff:0xff9500));
+  const ovs=PANES.map(([k],i)=>k==='gt'?null:makeOverlay(views[i].scene,sprite,0.02));
+  function alloc(){ views.forEach(V=>V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3))); ovs.forEach(o=>o&&o.alloc(N)); }
+  function frameAt(key,t){ const tA=(C-1)*NAT; if(t<tA) return Math.min(C-1,Math.floor(t/NAT));
+    if(key==='gt') return Math.min(meta.gt_frames-1, C-1+Math.floor((t-tA)/NAT)); const s=meta.settings[key]; return Math.min(s.n_frames-1, C-1+Math.floor((t-tA)/s.dt_ms)); }
+  function nativeIndexOf(key,f){ if(key==='gt'||f<C) return f; const s=meta.settings[key]; return Math.min(meta.gt_frames-1, C-1+Math.round((f-C+1)*s.dt_ms/NAT)); }
+  function adeAt(key,f){ const g=bufs.gt,p=bufs[key],gi=nativeIndexOf(key,f); let s=0; for(let i=0;i<N;i++){const o=(f*N+i)*3,og=(gi*N+i)*3; const dx=p[o]-g[og],dy=p[o+1]-g[og+1],dz=p[o+2]-g[og+2]; s+=Math.sqrt(dx*dx+dy*dy+dz*dz);} return s/N*10; }
   let tNow=0, playing=true, last=0;
-  function setTime(t){
-    if(!meta) return; tNow=t;
-    PANES.forEach(([key], i)=>{
-      const f=frameAt(key,t); const buf=bufs[key];
-      views[i].geo.attributes.position.array.set(buf.subarray(f*N*3, f*N*3+N*3));
-      views[i].geo.attributes.position.needsUpdate=true;
-      const el=document.getElementById('lbl_'+key);
-      if(el){ const ctx=f<C; const a = key==='gt'||ctx ? null : adeAt(key,f);
-        el.querySelector('.m').textContent = ctx ? `context ${f+1}/${C}` :
-          (key==='gt' ? `frame +${f-C+1}` : `step ${f-C+1}/${meta.settings[key].steps} · err ${a==null?'—':a.toFixed(3)+' m'}`); }
-    });
-    document.getElementById('scrub').value=Math.round(t);
-    document.getElementById('clock').textContent=`t = ${Math.round(t)} ms`;
-  }
-  const canvas=document.getElementById('c');
-  const renderer=new THREE.WebGLRenderer({canvas, antialias:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setScissorTest(true);
-  const camera=new THREE.PerspectiveCamera(42,1,0.01,100); camera.position.set(1.45,0.95,1.65);
-  const controls=new THREE.OrbitControls(camera, canvas);
-  controls.target.set(0.5,0.5,0.5); controls.enableDamping=true; controls.dampingFactor=0.08;
-  controls.minDistance=0.05; controls.maxDistance=10;
-  function layoutLabels(){
-    const st=document.getElementById('stage'), W=st.clientWidth, H=st.clientHeight;
-    const pw=W/COLS, ph=H/ROWS; const box=document.getElementById('labels');
-    if(!box.children.length){ PANES.forEach(([key,label])=>{ const d=document.createElement('div'); d.className='lbl'; d.id='lbl_'+key;
-      d.innerHTML=`<b>${label}</b><br><span class="m"></span>`; box.appendChild(d); }); }
-    PANES.forEach(([key],i)=>{ const el=document.getElementById('lbl_'+key);
-      el.style.left=(i%COLS)*pw+8+'px'; el.style.top=Math.floor(i/COLS)*ph+8+'px'; });
-  }
-  function render(){
-    const w=canvas.clientWidth, h=canvas.clientHeight; if(!w||!h) return;
-    const pr=renderer.getPixelRatio();
-    if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)){ renderer.setSize(w,h,false); layoutLabels(); }
-    const pw=Math.floor(w/COLS), ph=Math.floor(h/ROWS);
-    camera.aspect=pw/ph; camera.updateProjectionMatrix();
-    views.forEach((V,i)=>{ const x=(i%COLS)*pw, y=(ROWS-1-Math.floor(i/COLS))*ph;
-      renderer.setViewport(x,y,pw,ph); renderer.setScissor(x,y,pw,ph); renderer.render(V.scene,camera); });
-  }
-  function loop(ts){
-    controls.update();
-    if(playing && meta){ if(!last) last=ts; const dt=(ts-last)/SLOW; last=ts;
-      let t=tNow+dt; if(t>tEnd+250) t=0; setTime(t); } else last=ts;
-    render(); requestAnimationFrame(loop);
-  }
-  document.getElementById('play').onclick=function(){ playing=!playing; this.textContent=playing?'❚❚':'▶'; };
-  document.getElementById('scrub').oninput=function(){ playing=false; document.getElementById('play').textContent='▶'; setTime(+this.value); };
-
-  async function loadExample(name){
-    const v='?t='+Date.now();
-    meta=await (await fetch(`data/dtstudy/${name}/meta.json${v}`)).json();
-    N=meta.n_particles; C=meta.context_len; NAT=meta.native_dt_ms;
-    const keys=['gt', ...Object.keys(meta.settings)];
-    const arrs=await Promise.all(keys.map(k=>fetch(`data/dtstudy/${name}/${k}.bin${v}`).then(r=>r.arrayBuffer())));
-    bufs={}; keys.forEach((k,i)=>bufs[k]=new Float32Array(arrs[i]));
-    alloc();
-    tEnd=(C-1)*NAT + Math.max(...Object.values(meta.settings).map(s=>s.steps*s.dt_ms));
-    document.getElementById('scrub').max=Math.round(tEnd);
+  function setTime(t){ if(!meta) return; tNow=t;
+    PANES.forEach(([key],i)=>{ const f=frameAt(key,t); views[i].geo.attributes.position.array.set(bufs[key].subarray(f*N*3,f*N*3+N*3)); views[i].geo.attributes.position.needsUpdate=true;
+      if(ovs[i]) ovs[i].update(bufs.gt,bufs[key],nativeIndexOf(key,f),f,N);
+      const el=document.getElementById('lbl_'+key); if(el){ const ctx=f<C; el.querySelector('.m').textContent= ctx?`context ${f+1}/${C}`:(key==='gt'?`frame +${f-C+1}`:`step ${f-C+1}/${meta.settings[key].steps} · err ${adeAt(key,f).toFixed(3)} m`); } });
+    document.getElementById('scrub').value=Math.round(t); document.getElementById('clock').textContent=`t = ${Math.round(t)} ms`; }
+  const canvas=document.getElementById('c'); const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setScissorTest(true);
+  const camera=new THREE.PerspectiveCamera(42,1,0.01,100); camera.position.set(1.45,0.95,1.65); const controls=new THREE.OrbitControls(camera,canvas);
+  controls.target.set(0.5,0.5,0.5); controls.enableDamping=true; controls.dampingFactor=0.08; controls.minDistance=0.05; controls.maxDistance=10;
+  function layoutLabels(){ const st=document.getElementById('stage'),W=st.clientWidth,H=st.clientHeight,pw=W/COLS,ph=H/ROWS,box=document.getElementById('labels');
+    if(!box.children.length) PANES.forEach(([key,label])=>{const d=document.createElement('div'); d.className='lbl'; d.id='lbl_'+key; d.innerHTML=`<b>${label}</b><br><span class="m"></span>`; box.appendChild(d);});
+    PANES.forEach(([key],i)=>{const el=document.getElementById('lbl_'+key); el.style.left=(i%COLS)*pw+8+'px'; el.style.top=Math.floor(i/COLS)*ph+8+'px';}); }
+  function render(){ const w=canvas.clientWidth,h=canvas.clientHeight; if(!w||!h) return; const pr=renderer.getPixelRatio();
+    if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)){renderer.setSize(w,h,false); layoutLabels();}
+    const pw=Math.floor(w/COLS),ph=Math.floor(h/ROWS); camera.aspect=pw/ph; camera.updateProjectionMatrix();
+    views.forEach((V,i)=>{const x=(i%COLS)*pw,y=(ROWS-1-Math.floor(i/COLS))*ph; renderer.setViewport(x,y,pw,ph); renderer.setScissor(x,y,pw,ph); renderer.render(V.scene,camera);}); }
+  function loop(ts){ controls.update(); if(playing&&meta){ if(!last) last=ts; let t=tNow+(ts-last)/SLOW; last=ts; if(t>tEnd+250) t=0; setTime(t);} else last=ts; render(); requestAnimationFrame(loop); }
+  document.getElementById('play').onclick=function(){playing=!playing; this.textContent=playing?'Pause':'Play';};
+  document.getElementById('scrub').oninput=function(){playing=false; document.getElementById('play').textContent='Play'; setTime(+this.value);};
+  document.getElementById('ovl').onclick=function(){ovOn=!ovOn; this.classList.toggle('active',ovOn); ovs.forEach(o=>o&&o.setVisible(ovOn)); setTime(tNow);};
+  async function loadExample(name){ const v='?t='+Date.now(); meta=await (await fetch(`data/dtstudy/${name}/meta.json${v}`)).json(); N=meta.n_particles; C=meta.context_len; NAT=meta.native_dt_ms;
+    const keys=['gt',...Object.keys(meta.settings)]; const arrs=await Promise.all(keys.map(k=>fetch(`data/dtstudy/${name}/${k}.bin${v}`).then(r=>r.arrayBuffer())));
+    bufs={}; keys.forEach((k,i)=>bufs[k]=new Float32Array(arrs[i])); alloc(); tEnd=(C-1)*NAT+Math.max(...Object.values(meta.settings).map(s=>s.steps*s.dt_ms)); document.getElementById('scrub').max=Math.round(tEnd);
     let h='<tr><th>setting</th><th>steps × Δt</th><th>window ADE</th><th>final-frame error</th></tr>';
-    for(const [k,s] of Object.entries(meta.settings))
-      h+=`<tr><td>${LABEL[k]}</td><td>${s.steps} × ${Math.round(s.dt_ms)} ms</td><td>${cm(s.ade_m)}</td><td>${cm(s.fde_m)}</td></tr>`;
-    document.getElementById('extable').innerHTML=h;
-    document.getElementById('excap').textContent=
-      `Example ${meta.rank}/10 (p${meta.pct} of the implicit@42 ms error distribution) · scene ${meta.scene_id}, wall impact in transition ${meta.j}→${meta.j+1}.`;
-    setTime(0); playing=true; last=0; document.getElementById('play').textContent='❚❚';
-  }
-  async function init(){
-    const summary=await (await fetch('data/dtstudy/summary.json?t='+Date.now())).json();
+    for(const [k,s] of Object.entries(meta.settings)) h+=`<tr><td>${LABEL[k]}</td><td>${s.steps} × ${Math.round(s.dt_ms)} ms</td><td>${cm(s.ade_m)}</td><td>${cm(s.fde_m)}</td></tr>`;
+    const tb=document.getElementById('extable'); tb.innerHTML=h; markBest(tb,[2,3]);
+    setTime(0); playing=true; last=0; document.getElementById('play').textContent='Pause'; }
+  async function init(){ const summary=await (await fetch('data/dtstudy/summary.json?t='+Date.now())).json();
     let h='<tr><th>model · step size</th><th>steps</th><th>horizon</th><th>mean ADE</th><th>median ADE</th></tr>';
-    for(const k of ['fixed42','dti42','dti84','dti125','dti167']){ const s=summary[k]; if(!s) continue;
-      h+=`<tr><td>${LABEL[k]}</td><td>${s.steps}</td><td>${s.horizon_s.toFixed(2)} s</td><td>${cm(s.mean_ade_m)}</td><td>${cm(s.median_ade_m)}</td></tr>`; }
-    document.getElementById('summary').innerHTML=h;
-    const idx=await (await fetch('data/dtstudy/index.json?t='+Date.now())).json();
-    const ex=document.getElementById('ex');
-    idx.forEach((w,i)=>{ const b=document.createElement('button'); b.textContent=`#${w.rank} · ${cm(w.ade_dti42_m)}`;
-      b.className=i===0?'active':''; b.onclick=()=>{ ex.querySelectorAll('button').forEach(x=>x.className=''); b.className='active'; loadExample(w.name); };
-      ex.appendChild(b); });
-    layoutLabels();
-    if(idx.length) await loadExample(idx[0].name);
-    requestAnimationFrame(loop);
-  }
-  addEventListener('resize', layoutLabels);
-  init();
+    for(const k of ['fixed42','dti42','dti84','dti125','dti167']){const s=summary[k]; if(!s) continue; h+=`<tr><td>${LABEL[k]}</td><td>${s.steps}</td><td>${s.horizon_s.toFixed(2)} s</td><td>${cm(s.mean_ade_m)}</td><td>${cm(s.median_ade_m)}</td></tr>`;}
+    const tb=document.getElementById('summary'); tb.innerHTML=h; markBest(tb,[3,4]);
+    const idx=await (await fetch('data/dtstudy/index.json?t='+Date.now())).json(); const ex=document.getElementById('ex');
+    idx.forEach((w,i)=>{const b=document.createElement('button'); b.textContent=`#${w.rank} · ${cm(w.ade_dti42_m)}`; b.className=i===0?'active':''; b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className=''); b.className='active'; loadExample(w.name);}; ex.appendChild(b);});
+    layoutLabels(); if(idx.length) await loadExample(idx[0].name); requestAnimationFrame(loop); }
+  addEventListener('resize',layoutLabels); init();
 })();
 </script>
 </body>

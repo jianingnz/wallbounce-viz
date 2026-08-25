@@ -5,34 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>MPM models — live</title>
+<link rel="stylesheet" href="site.css">
 <style>
-  :root{--ink:#111; --soft:#555; --line:#ddd; --gt:#1f4e9c; --pred:#c1440e; --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a}
-  *{box-sizing:border-box}
-  body{margin:0; background:#fff; color:var(--ink); font-family:"Source Serif Pro",Georgia,"Times New Roman",serif; line-height:1.5}
-  .wrap{max-width:1180px; margin:0 auto; padding:24px 24px 60px}
-  .tabs{display:flex; gap:6px; margin:0 0 14px}
-  .tabs button{font:inherit; font-size:14px; padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:3px; cursor:pointer}
-  .tabs button.active{background:var(--ink); color:#fff; border-color:var(--ink)}
-  h2{font-size:16px; font-weight:600; margin:22px 0 6px; border-bottom:1px solid var(--line); padding-bottom:4px}
   .status{font-size:14px; color:var(--soft); margin:0 0 6px}
-  .charts{display:grid; grid-template-columns:1fr 1fr; gap:18px}
   svg{display:block; width:100%; height:220px}
-  .leg{font-size:12.5px; color:var(--soft)} .leg span{display:inline-block; width:14px; height:3px; vertical-align:middle; margin:0 5px 0 12px}
-  table{border-collapse:collapse; font-size:14px; margin:6px 0; width:100%}
-  th,td{padding:5px 10px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums}
-  th{font-weight:600; color:var(--soft); font-size:13px} td:first-child,th:first-child{text-align:left}
-  .ex{display:flex; gap:4px; flex-wrap:wrap; margin:6px 0 10px}
-  .ex button{font:inherit; font-size:12.5px; padding:4px 9px; border:1px solid var(--line); background:#fff; cursor:pointer; border-radius:3px}
-  .ex button.active{background:var(--ink); color:#fff; border-color:var(--ink)}
-  #stage{position:relative; height:520px; border:1px solid var(--line); background:#fafafa}
-  canvas{display:block; width:100%; height:100%}
-  .lbl{position:absolute; top:8px; font-size:13px; pointer-events:none; background:rgba(255,255,255,.85); padding:3px 7px; border-radius:3px}
-  .lbl.l{left:10px} .lbl.r{left:calc(50% + 10px)} .lbl .m{color:var(--soft); font-family:ui-monospace,Menlo,monospace; font-size:11.5px}
-  .ctl{display:flex; align-items:center; gap:12px; margin-top:8px; font-size:13px; color:var(--soft)}
-  .ctl input[type=range]{flex:1} .ctl button{font:inherit; padding:2px 10px; border:1px solid var(--line); background:#fff; cursor:pointer; border-radius:3px}
-  .mono{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; color:var(--ink)}
-  .caption{font-size:13px; color:var(--soft); margin:4px 0 0}
-  @media(max-width:800px){ .charts{grid-template-columns:1fr} }
+  #stage{height:520px}
+  .lbl{top:8px} .lbl.l{left:10px} .lbl.r{left:calc(50% + 10px)}
 </style>
 </head>
 <body>
@@ -50,11 +28,12 @@
   <div class="ex" id="ex"></div>
   <p class="caption" id="excap"></p>
   <div id="stage"><canvas id="c"></canvas><div class="lbl l"><b>ground truth</b><br><span class="m" id="m_gt"></span></div><div class="lbl r" style="color:var(--pred)"><b>prediction</b><br><span class="m" id="m_pr"></span></div></div>
-  <div class="ctl"><button id="play">❚❚</button><input type="range" id="scrub" min="0" max="20" value="0" step="1"><span class="mono" id="frame">1 / 21</span><span class="mono" id="ade"></span></div>
+  <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="20" value="0" step="1"><span class="mono" id="frame">1 / 21</span><span class="mono" id="ade"></span><button id="ovl">GT → prediction vectors</button></div>
   <p class="caption">5 context frames (2.5 ms apart) → 16 predicted frames. Drag to orbit, scroll to zoom, shared camera.</p>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js"></script>
 <script>
 (function(){
   const MODELS={sand:'sand (2048 MPM particles)', shell:'elastic cube + sphere shells (2048 particles)'};
@@ -66,29 +45,28 @@
     const vals=series.flatMap(s=>s.pts.map(p=>p[1])).filter(v=>v>0); if(!vals.length){svg.innerHTML='';return;}
     const lo=Math.pow(10,Math.floor(Math.log10(Math.min(...vals)))), hi=Math.pow(10,Math.ceil(Math.log10(Math.max(...vals))));
     const X=s=>L+(W-L-R)*s/xmax, Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
-    let g=''; for(let d=lo; d<=hi; d*=10){ g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="#eee"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d.toExponential(0)}</text>`; }
-    for(const s of [0,0.25,0.5,0.75,1]) g+=`<text x="${X(s*xmax)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#666">${s*xmax/1000}k</text>`;
+    let g=''; for(let d=lo; d<=hi; d*=10){ g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="#e5e5ea"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${d.toExponential(0)}</text>`; }
+    for(const s of [0,0.25,0.5,0.75,1]) g+=`<text x="${X(s*xmax)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#6e6e73">${s*xmax/1000}k</text>`;
     for(const s of series) g+=`<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="1.8"/>`;
     svg.innerHTML=g; document.getElementById(legId).innerHTML=series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('');
   }
   function pfChart(pf){ const svg=document.getElementById('c_pf'); const W=Math.max(svg.clientWidth,360),H=200,L=50,R=12,Tp=8,B=24; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
     const ymax=Math.max(...pf)*1.1; const X=i=>L+(W-L-R)*(i-1)/15, Y=v=>Tp+(H-Tp-B)*(1-v/ymax); let g='';
-    for(let k=0;k<=4;k++){const v=ymax*k/4; g+=`<line x1="${L}" y1="${Y(v)}" x2="${W-R}" y2="${Y(v)}" stroke="#eee"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#666">${v.toFixed(1)}</text>`;}
-    for(let i=1;i<=16;i++) g+=`<text x="${X(i)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#666">+${i}</text>`;
-    g+=`<path d="${pf.map((v,i)=>(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="#c1440e" stroke-width="2.2"/>`; svg.innerHTML=g; }
+    for(let k=0;k<=4;k++){const v=ymax*k/4; g+=`<line x1="${L}" y1="${Y(v)}" x2="${W-R}" y2="${Y(v)}" stroke="#e5e5ea"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${v.toFixed(1)}</text>`;}
+    for(let i=1;i<=16;i++) g+=`<text x="${X(i)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#6e6e73">+${i}</text>`;
+    g+=`<path d="${pf.map((v,i)=>(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="#ff9500" stroke-width="2.2"/>`; svg.innerHTML=g; }
 
   // viewer
-  function disc(){const s=64,cv=document.createElement('canvas');cv.width=cv.height=s;const g=cv.getContext('2d');const rg=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);rg.addColorStop(0,'rgba(255,255,255,1)');rg.addColorStop(.5,'rgba(255,255,255,.95)');rg.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=rg;g.beginPath();g.arc(s/2,s/2,s/2,0,7);g.fill();return new THREE.CanvasTexture(cv);}
-  const sprite=disc();
-  function makeView(color){const scene=new THREE.Scene();scene.background=new THREE.Color('#fafafa');const geo=new THREE.BufferGeometry();
+  const sprite=vizDisc(); let ovOn=false;
+  function makeView(color){const scene=new THREE.Scene();scene.background=new THREE.Color('#f5f5f7');const geo=new THREE.BufferGeometry();
     const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.012,map:sprite,color,transparent:true,alphaTest:0.35,depthWrite:true,sizeAttenuation:true}));pts.frustumCulled=false;scene.add(pts);
-    const boxGeo=new THREE.BoxGeometry(1,1.2,1);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo),new THREE.LineBasicMaterial({color:0x888888,transparent:true,opacity:0.6}));edges.position.set(0.5,0.6,0.5);scene.add(edges);
-    const grid=new THREE.GridHelper(1,10,0xbbbbbb,0xdddddd);grid.position.set(0.5,0,0.5);scene.add(grid);return {scene,geo};}
-  const V_gt=makeView(0x1f4e9c), V_pr=makeView(0xc1440e);
-  function alloc(){for(const V of [V_gt,V_pr]) V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));}
+    const boxGeo=new THREE.BoxGeometry(1,1.2,1);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));edges.position.set(0.5,0.6,0.5);scene.add(edges);
+    const grid=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);grid.position.set(0.5,0,0.5);scene.add(grid);return {scene,geo};}
+  const V_gt=makeView(0x0a84ff), V_pr=makeView(0xff9500); const ov=makeOverlay(V_pr.scene,sprite,0.008);
+  function alloc(){for(const V of [V_gt,V_pr]) V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3)); ov.alloc(N);}
   function adeF(f){let s=0;for(let i=0;i<N;i++){const o=(f*N+i)*3;const dx=bufs.pred[o]-bufs.gt[o],dy=bufs.pred[o+1]-bufs.gt[o+1],dz=bufs.pred[o+2]-bufs.gt[o+2];s+=Math.sqrt(dx*dx+dy*dy+dz*dz);}return s/N*1000;}
   let frame=0,playing=true,last=0;
-  function setFrame(f){if(!bufs)return;frame=f;for(const [V,b] of [[V_gt,bufs.gt],[V_pr,bufs.pred]]){V.geo.attributes.position.array.set(b.subarray(f*N*3,f*N*3+N*3));V.geo.attributes.position.needsUpdate=true;}
+  function setFrame(f){if(!bufs)return;frame=f;for(const [V,b] of [[V_gt,bufs.gt],[V_pr,bufs.pred]]){V.geo.attributes.position.array.set(b.subarray(f*N*3,f*N*3+N*3));V.geo.attributes.position.needsUpdate=true;} ov.update(bufs.gt,bufs.pred,f,f,N);
     const ctx=f<C; document.getElementById('m_gt').textContent=ctx?`context ${f+1}/${C}`:`frame +${f-C+1}`; document.getElementById('m_pr').textContent=ctx?`context ${f+1}/${C}`:`frame +${f-C+1} · err ${adeF(f).toFixed(2)} mm`;
     document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`${f+1} / ${T}`; document.getElementById('ade').textContent=ctx?'':`ADE ${adeF(f).toFixed(2)} mm`;}
   const canvas=document.getElementById('c');const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setScissorTest(true);
@@ -96,14 +74,15 @@
   function render(){const w=canvas.clientWidth,h=canvas.clientHeight,half=Math.floor(w/2);if(!w||!h)return;const pr=renderer.getPixelRatio();if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr))renderer.setSize(w,h,false);
     camera.aspect=half/h;camera.updateProjectionMatrix();renderer.setViewport(0,0,half,h);renderer.setScissor(0,0,half,h);renderer.render(V_gt.scene,camera);renderer.setViewport(half,0,w-half,h);renderer.setScissor(half,0,w-half,h);renderer.render(V_pr.scene,camera);}
   function loop(t){controls.update();if(playing&&bufs&&t-last>1000/4){setFrame((frame+1)%T);last=t;}render();requestAnimationFrame(loop);}
-  document.getElementById('play').onclick=function(){playing=!playing;this.textContent=playing?'❚❚':'▶';};
-  document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='▶';setFrame(+this.value);};
+  document.getElementById('play').onclick=function(){playing=!playing;this.textContent=playing?'Pause':'Play';};
+  document.getElementById('ovl').onclick=function(){ovOn=!ovOn;this.classList.toggle('active',ovOn);ov.setVisible(ovOn);setFrame(frame);};
+  document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='Play';setFrame(+this.value);};
 
   async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`data/mpm/${cur}/${name}/meta.json${v}`)).json();N=meta.n_particles;C=meta.context_len;T=meta.n_frames;
     const [g,p]=await Promise.all([fetch(`data/mpm/${cur}/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),fetch(`data/mpm/${cur}/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
     bufs={gt:new Float32Array(g),pred:new Float32Array(p)};alloc();document.getElementById('scrub').max=T-1;
     document.getElementById('excap').textContent=`Example ${meta.rank}/${6} (p${meta.pct} of the error distribution) · ${meta.clip} @ frame ${meta.j} · window ADE ${mm(meta.ade_mm)}, final-frame ${mm(meta.fde_mm)}`;
-    setFrame(0);playing=true;document.getElementById('play').textContent='❚❚';}
+    setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
   async function select(k){cur=k;document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
     const cv=await (await fetch(`data/curves_${k}.json?t=`+Date.now())).json(); const xm=100000;
     logChart('c_tr','l_tr',[{name:'train',color:'var(--s1)',pts:cv.train_loss},...(cv.train_loss_ema?[{name:'train·EMA',color:'var(--s3)',pts:cv.train_loss_ema}]:[])],xm);

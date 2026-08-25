@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Meetings</title>
+<link rel="stylesheet" href="../site.css">
 <style>
-  :root{--ink:#1a1a1a; --soft:#666; --line:#e2e2e2; --accent:#2a4d8f; --bg:#fff}
+  :root{--accent:var(--blue)}
   *{box-sizing:border-box}
   body{margin:0; background:var(--bg); color:var(--ink);
-       font-family:"Source Serif Pro",Georgia,"Times New Roman",serif; line-height:1.55; font-size:16px}
+       font-size:15px}
   .layout{display:grid; grid-template-columns:220px 1fr; min-height:100vh}
   nav{border-right:1px solid var(--line); padding:28px 18px; position:sticky; top:0; height:100vh; overflow:auto}
   nav h1{font-size:15px; font-weight:600; margin:0 0 4px; letter-spacing:.01em}
@@ -17,12 +18,12 @@
   nav .lbl{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--soft); margin:14px 0 6px}
   nav a{display:block; padding:6px 8px; border-radius:4px; color:var(--ink); text-decoration:none; font-size:14px}
   nav a small{display:block; color:var(--soft); font-size:12px}
-  nav a.active{background:#eef2f9; color:var(--accent); font-weight:600}
+  nav a.active{background:var(--card); color:var(--blue); font-weight:600}
   main{padding:28px 32px 60px}
   .subtabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px}
-  .subtabs button{font:inherit; font-size:14px; padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:3px; cursor:pointer}
-  .subtabs button.active{background:var(--ink); color:#fff; border-color:var(--ink)}
-  main iframe{width:100%; height:calc(100vh - 100px); border:1px solid var(--line); border-radius:4px; background:#fff}
+  .subtabs button{font:inherit; font-size:13.5px; padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:980px; cursor:pointer}
+  .subtabs button.active{background:var(--blue); color:#fff; border-color:var(--blue)}
+  main iframe{width:100%; height:calc(100vh - 100px); border:1px solid var(--line); border-radius:12px; background:#fff}
   main h1{font-size:28px; font-weight:600; margin:0 0 2px; letter-spacing:-.01em}
   main .date{color:var(--soft); font-size:14px; margin-bottom:28px}
   main h2{font-size:20px; font-weight:600; margin:34px 0 10px; padding-bottom:4px; border-bottom:1px solid var(--line)}

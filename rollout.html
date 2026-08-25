@@ -1,148 +1,83 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<title>Prediction horizon — rollout vs joint</title>
-<style>
-  :root{--ink:#111; --soft:#555; --line:#ddd; --gt:#1f4e9c; --pred:#c1440e; --bg:#fff; --c16:#c1440e; --c8:#7a3fb0; --c4:#1a8f5a}
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--ink); font-family:"Source Serif Pro",Georgia,"Times New Roman",serif; line-height:1.5}
-  .wrap{max-width:1180px; margin:0 auto; padding:32px 24px 60px}
-  h1{font-size:26px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em}
-  .sub{color:var(--soft); font-size:15px; margin:0 0 22px}
-  h2{font-size:17px; font-weight:600; margin:28px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px}
-  p{margin:6px 0 10px; font-size:15px}
-  a{color:var(--gt)}
-  table{border-collapse:collapse; font-size:14px; margin:8px 0 4px; width:100%}
-  th,td{padding:6px 10px; border-bottom:1px solid var(--line); text-align:right; font-variant-numeric:tabular-nums}
-  th{font-weight:600; color:var(--soft); font-size:13px}
-  td:first-child,th:first-child{text-align:left}
-  .caption{font-size:13px; color:var(--soft); margin:4px 0 0}
-  .ex{display:flex; gap:4px; flex-wrap:wrap; margin:6px 0 10px}
-  .ex button{font:inherit; font-size:12.5px; padding:4px 9px; border:1px solid var(--line); background:#fff; cursor:pointer; border-radius:3px; font-variant-numeric:tabular-nums}
-  .ex button.active{background:var(--ink); color:#fff; border-color:var(--ink)}
-  #stage{position:relative; height:620px; border:1px solid var(--line); background:#fafafa}
-  canvas{display:block; width:100%; height:100%}
-  .lbl{position:absolute; font-size:13px; pointer-events:none; line-height:1.3; background:rgba(255,255,255,.85); padding:3px 7px; border-radius:3px}
-  .lbl b{font-weight:600} .lbl .m{color:var(--soft); font-family:ui-monospace,Menlo,monospace; font-size:11.5px}
-  .ctl{display:flex; align-items:center; gap:12px; margin-top:8px; font-size:13px; color:var(--soft)}
-  .ctl input[type=range]{flex:1}
-  .ctl button{font:inherit; padding:2px 10px; border:1px solid var(--line); background:#fff; cursor:pointer; border-radius:3px}
-  .mono{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; color:var(--ink)}
-  svg{display:block; width:100%; height:240px}
-  .leg{font-size:13px; color:var(--soft); margin:4px 0 0}
-  .leg span{display:inline-block; width:14px; height:3px; vertical-align:middle; margin:0 5px 0 12px}
-</style>
+<title>Horizon rollout</title>
+<link rel="stylesheet" href="site.css">
+<style>#stage{height:620px}</style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Prediction horizon: joint 16 vs autoregressive 8×2 and 4×4</h1>
-  <p class="sub">The same wall-bounce event reaching 16 frames (0.67 s) three ways, with one implicit-Δt model per horizon. MOVi-spheres, held-out scenes. <a href="index.html">← training viewer</a> · <a href="dt.html">Δt study</a></p>
-
-  <h2>1. Setup</h2>
-  <p>Three implicit-Δt models were trained identically except for the prediction horizon (16, 8 or 4 future frames). Each is given the same 5 ground-truth context frames and must reach frame +16 at the native 42 ms step: the 16-frame model in one joint prediction; the 8-frame model in two autoregressive passes and the 4-frame model in four, each pass taking its own previous output as context. Every pass is generated from pure noise with the diffusion-forcing pyramid sampler (25 steps) — the same rollout protocol as the original code base. Error = mean particle distance to ground truth (real meters; box width 10 m). Windows are wall-impact events: the first predicted step contains the ball–wall contact.</p>
-
-  <h2>2. Results (100 wall-impact windows, 2 seeds)</h2>
+  <h2 style="margin-top:0">All 100 validation windows</h2>
   <table id="summary"></table>
-  <p class="caption">Table 1. ADE = mean over the 16 predicted frames; FDE = error at frame +16.</p>
-  <svg id="chart"></svg>
-  <div class="leg" id="leg"></div>
-  <p class="caption">Figure 1. Per-frame error (meters) at predicted frames +1 … +16, averaged over the 100 windows. Dashed verticals mark the autoregressive pass boundaries of the 4-frame model.</p>
-
-  <h2>3. Examples — the same window under all three, best to worst</h2>
+  <svg class="chart" id="chart"></svg><div class="leg" id="leg"></div>
+  <h2>One window, three horizons</h2>
   <div class="ex" id="ex"></div>
   <table id="extable"></table>
-  <p class="caption" id="excap"></p>
-  <div id="stage"><canvas id="c"></canvas><div id="labels"></div></div>
+  <div id="stage" style="margin-top:12px"><canvas id="c"></canvas><div id="labels"></div></div>
   <div class="ctl">
-    <button id="play">❚❚</button>
+    <button id="play">Pause</button>
     <input type="range" id="scrub" min="0" max="20" value="0" step="1">
     <span class="mono" id="frame">1 / 21</span>
-    <span class="mono" id="phase">context</span>
+    <button id="ovl">GT → prediction vectors</button>
   </div>
-  <p class="caption">Ranked by the 16-frame model's ADE. Top: ground truth · joint 16. Bottom: autoregressive 8 × 2 · autoregressive 4 × 4. Labels show the current pass; drag to orbit, scroll to zoom, shared camera.</p>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js"></script>
 <script>
 (function(){
-  const PANES=[['gt','ground truth',0x1f4e9c],['F16','joint 16-frame model',0xc1440e],['F8','8-frame model · 2 AR passes',0x7a3fb0],['F4','4-frame model · 4 AR passes',0x1a8f5a]];
-  const LABEL={F16:'joint 16 (1 pass)',F8:'8-frame × 2 passes',F4:'4-frame × 4 passes'};
-  const COLOR={F16:'#c1440e',F8:'#7a3fb0',F4:'#1a8f5a'};
-  const COLS=2, ROWS=2, FPS=3;
-  const cm=v=>(v*100).toFixed(1)+' cm';
-  let meta=null, bufs={}, N=128, C=5, T=21;
-
-  function disc(){ const s=64, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
-    const rg=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2); rg.addColorStop(0,'rgba(255,255,255,1)'); rg.addColorStop(.5,'rgba(255,255,255,.95)'); rg.addColorStop(1,'rgba(255,255,255,0)');
-    g.fillStyle=rg; g.beginPath(); g.arc(s/2,s/2,s/2,0,7); g.fill(); return new THREE.CanvasTexture(cv); }
-  const sprite=disc();
-  function makeView(color){ const scene=new THREE.Scene(); scene.background=new THREE.Color('#fafafa');
-    const geo=new THREE.BufferGeometry();
-    const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.03,map:sprite,color,transparent:true,alphaTest:0.35,depthWrite:true,sizeAttenuation:true}));
-    pts.frustumCulled=false; scene.add(pts);
-    const boxGeo=new THREE.BoxGeometry(1,0.8,1);
-    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo),new THREE.LineBasicMaterial({color:0x888888,transparent:true,opacity:0.6})); edges.position.set(0.5,0.5,0.5); scene.add(edges);
-    const grid=new THREE.GridHelper(1,10,0xbbbbbb,0xdddddd); grid.position.set(0.5,0.1,0.5); scene.add(grid);
-    return {scene,geo}; }
-  const views=PANES.map(p=>makeView(p[2]));
-  function alloc(){ for(const V of views) V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3)); }
+  const PANES=[['gt','ground truth',0x0a84ff],['F16','joint 16-frame model',0xff9500],['F8','8-frame model · 2 AR passes',0xaf52de],['F4','4-frame model · 4 AR passes',0x34c759]];
+  const LABEL={F16:'joint 16 (1 pass)',F8:'8-frame × 2 passes',F4:'4-frame × 4 passes'}; const COLOR={F16:'#ff9500',F8:'#af52de',F4:'#34c759'};
+  const COLS=2, ROWS=2, FPS=3; const cm=v=>(v*100).toFixed(1)+' cm';
+  let meta=null, bufs={}, N=128, C=5, T=21, ovOn=false; const sprite=vizDisc();
+  function makeView(color){ const scene=new THREE.Scene(); scene.background=new THREE.Color('#f5f5f7'); const geo=new THREE.BufferGeometry();
+    const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.03,map:sprite,color,transparent:true,alphaTest:0.35,depthWrite:true,sizeAttenuation:true})); pts.frustumCulled=false; scene.add(pts);
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,0.8,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7})); edges.position.set(0.5,0.5,0.5); scene.add(edges);
+    const grid=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea); grid.position.set(0.5,0.1,0.5); scene.add(grid); return {scene,geo}; }
+  const views=PANES.map(p=>makeView(p[2])); const ovs=PANES.map(([k],i)=>k==='gt'?null:makeOverlay(views[i].scene,sprite,0.02));
+  function alloc(){ views.forEach(V=>V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3))); ovs.forEach(o=>o&&o.alloc(N)); }
   function errAt(key,f){ const g=bufs.gt,p=bufs[key]; let s=0; for(let i=0;i<N;i++){const o=(f*N+i)*3; const dx=p[o]-g[o],dy=p[o+1]-g[o+1],dz=p[o+2]-g[o+2]; s+=Math.sqrt(dx*dx+dy*dy+dz*dz);} return s/N*10; }
   let frame=0, playing=true, last=0;
   function setFrame(f){ if(!meta) return; frame=f;
-    PANES.forEach(([key],i)=>{ views[i].geo.attributes.position.array.set(bufs[key].subarray(f*N*3,f*N*3+N*3)); views[i].geo.attributes.position.needsUpdate=true;
+    PANES.forEach(([key],i)=>{ views[i].geo.attributes.position.array.set(bufs[key].subarray(f*N*3,f*N*3+N*3)); views[i].geo.attributes.position.needsUpdate=true; if(ovs[i]) ovs[i].update(bufs.gt,bufs[key],f,f,N);
       const el=document.getElementById('lbl_'+key); if(!el) return; const ctx=f<C;
       if(key==='gt') el.querySelector('.m').textContent= ctx?`context ${f+1}/${C}`:`frame +${f-C+1}`;
-      else { const m=meta.models[key]; const k=f-C; const pass=Math.floor(k/m.F)+1;
-        el.querySelector('.m').textContent= ctx?`context ${f+1}/${C}`:`pass ${pass}/${m.passes} · frame ${k%m.F+1}/${m.F} · err ${errAt(key,f).toFixed(3)} m`; } });
-    document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`${f+1} / ${T}`;
-    document.getElementById('phase').textContent= f<C?'context':`predicted +${f-C+1}`; }
-  const canvas=document.getElementById('c'); const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setScissorTest(true);
-  const camera=new THREE.PerspectiveCamera(42,1,0.01,100); camera.position.set(1.45,0.95,1.65);
-  const controls=new THREE.OrbitControls(camera,canvas); controls.target.set(0.5,0.5,0.5); controls.enableDamping=true; controls.dampingFactor=0.08; controls.minDistance=0.05; controls.maxDistance=10;
+      else { const m=meta.models[key], k=f-C; el.querySelector('.m').textContent= ctx?`context ${f+1}/${C}`:`pass ${Math.floor(k/m.F)+1}/${m.passes} · frame ${k%m.F+1}/${m.F} · err ${errAt(key,f).toFixed(3)} m`; } });
+    document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`${f+1} / ${T}`; }
+  const canvas=document.getElementById('c'); const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setScissorTest(true);
+  const camera=new THREE.PerspectiveCamera(42,1,0.01,100); camera.position.set(1.45,0.95,1.65); const controls=new THREE.OrbitControls(camera,canvas);
+  controls.target.set(0.5,0.5,0.5); controls.enableDamping=true; controls.dampingFactor=0.08; controls.minDistance=0.05; controls.maxDistance=10;
   function layoutLabels(){ const st=document.getElementById('stage'),W=st.clientWidth,H=st.clientHeight,pw=W/COLS,ph=H/ROWS,box=document.getElementById('labels');
     if(!box.children.length) PANES.forEach(([key,label])=>{const d=document.createElement('div'); d.className='lbl'; d.id='lbl_'+key; d.innerHTML=`<b>${label}</b><br><span class="m"></span>`; box.appendChild(d);});
     PANES.forEach(([key],i)=>{const el=document.getElementById('lbl_'+key); el.style.left=(i%COLS)*pw+8+'px'; el.style.top=Math.floor(i/COLS)*ph+8+'px';}); }
-  function render(){ const w=canvas.clientWidth,h=canvas.clientHeight; if(!w||!h) return; const pr=renderer.getPixelRatio();
-    if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)){renderer.setSize(w,h,false); layoutLabels();}
+  function render(){ const w=canvas.clientWidth,h=canvas.clientHeight; if(!w||!h) return; const pr=renderer.getPixelRatio(); if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)){renderer.setSize(w,h,false); layoutLabels();}
     const pw=Math.floor(w/COLS),ph=Math.floor(h/ROWS); camera.aspect=pw/ph; camera.updateProjectionMatrix();
     views.forEach((V,i)=>{const x=(i%COLS)*pw,y=(ROWS-1-Math.floor(i/COLS))*ph; renderer.setViewport(x,y,pw,ph); renderer.setScissor(x,y,pw,ph); renderer.render(V.scene,camera);}); }
   function loop(t){ controls.update(); if(playing&&meta&&t-last>1000/FPS){ setFrame((frame+1)%T); last=t; } render(); requestAnimationFrame(loop); }
-  document.getElementById('play').onclick=function(){playing=!playing; this.textContent=playing?'❚❚':'▶';};
-  document.getElementById('scrub').oninput=function(){playing=false; document.getElementById('play').textContent='▶'; setFrame(+this.value);};
-
-  function chart(summary){ const svg=document.getElementById('chart'); const W=Math.max(svg.clientWidth,400),H=240,L=52,R=14,Tp=10,B=26;
-    svg.setAttribute('viewBox',`0 0 ${W} ${H}`); const keys=['F16','F8','F4']; const ymax=Math.max(...keys.flatMap(k=>summary[k].per_frame_m))*1.08;
-    const X=i=>L+(W-L-R)*(i-1)/15, Y=v=>Tp+(H-Tp-B)*(1-v/ymax); let g='';
-    for(let k=0;k<=4;k++){ const v=ymax*k/4; g+=`<line x1="${L}" y1="${Y(v)}" x2="${W-R}" y2="${Y(v)}" stroke="#eee"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#666">${(v*100).toFixed(0)} cm</text>`; }
-    for(let i=1;i<=16;i++) g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">+${i}</text>`;
-    for(const b of [4,8,12]) g+=`<line x1="${X(b)+ (X(b+1)-X(b))/2}" y1="${Tp}" x2="${X(b)+(X(b+1)-X(b))/2}" y2="${H-B}" stroke="#ccc" stroke-dasharray="3 3"/>`;
+  document.getElementById('play').onclick=function(){playing=!playing; this.textContent=playing?'Pause':'Play';};
+  document.getElementById('scrub').oninput=function(){playing=false; document.getElementById('play').textContent='Play'; setFrame(+this.value);};
+  document.getElementById('ovl').onclick=function(){ovOn=!ovOn; this.classList.toggle('active',ovOn); ovs.forEach(o=>o&&o.setVisible(ovOn)); setFrame(frame);};
+  function chart(summary){ const svg=document.getElementById('chart'); const W=Math.max(svg.clientWidth,400),H=230,L=52,R=14,Tp=10,B=26; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    const keys=['F16','F8','F4']; const ymax=Math.max(...keys.flatMap(k=>summary[k].per_frame_m))*1.08; const X=i=>L+(W-L-R)*(i-1)/15, Y=v=>Tp+(H-Tp-B)*(1-v/ymax); let g='';
+    for(let k=0;k<=4;k++){const v=ymax*k/4; g+=`<line x1="${L}" y1="${Y(v)}" x2="${W-R}" y2="${Y(v)}" stroke="#e5e5ea"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${(v*100).toFixed(0)} cm</text>`;}
+    for(let i=1;i<=16;i++) g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#6e6e73">+${i}</text>`;
+    for(const b of [4,8,12]) g+=`<line x1="${(X(b)+X(b+1))/2}" y1="${Tp}" x2="${(X(b)+X(b+1))/2}" y2="${H-B}" stroke="#d2d2d7" stroke-dasharray="3 3"/>`;
     for(const k of keys){ const pts=summary[k].per_frame_m; g+=`<path d="${pts.map((v,i)=>(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${COLOR[k]}" stroke-width="2.2"/>`; }
-    svg.innerHTML=g;
-    document.getElementById('leg').innerHTML=keys.map(k=>`<span style="background:${COLOR[k]}"></span>${LABEL[k]}`).join(''); }
-
-  async function loadExample(name){ const v='?t='+Date.now(); meta=await (await fetch(`data/rollout/${name}/meta.json${v}`)).json();
-    N=meta.n_particles; C=meta.context_len; T=meta.n_frames; const keys=['gt','F16','F8','F4'];
-    const arrs=await Promise.all(keys.map(k=>fetch(`data/rollout/${name}/${k}.bin${v}`).then(r=>r.arrayBuffer())));
-    bufs={}; keys.forEach((k,i)=>bufs[k]=new Float32Array(arrs[i])); alloc(); document.getElementById('scrub').max=T-1;
+    svg.innerHTML=g; document.getElementById('leg').innerHTML=keys.map(k=>`<span style="background:${COLOR[k]}"></span>${LABEL[k]}`).join(''); }
+  async function loadExample(name){ const v='?t='+Date.now(); meta=await (await fetch(`data/rollout/${name}/meta.json${v}`)).json(); N=meta.n_particles; C=meta.context_len; T=meta.n_frames;
+    const keys=['gt','F16','F8','F4']; const arrs=await Promise.all(keys.map(k=>fetch(`data/rollout/${name}/${k}.bin${v}`).then(r=>r.arrayBuffer()))); bufs={}; keys.forEach((k,i)=>bufs[k]=new Float32Array(arrs[i])); alloc(); document.getElementById('scrub').max=T-1;
     let h='<tr><th>model</th><th>passes</th><th>window ADE</th><th>final-frame error</th></tr>';
     for(const k of ['F16','F8','F4']){const m=meta.models[k]; h+=`<tr><td>${LABEL[k]}</td><td>${m.passes}</td><td>${cm(m.ade_m)}</td><td>${cm(m.fde_m)}</td></tr>`;}
-    document.getElementById('extable').innerHTML=h;
-    document.getElementById('excap').textContent=`Example ${meta.rank}/10 (p${meta.pct} of the 16-frame model's error distribution) · scene ${meta.scene_id}, wall impact in transition ${meta.j}→${meta.j+1}.`;
-    setFrame(0); playing=true; document.getElementById('play').textContent='❚❚'; }
+    const tb=document.getElementById('extable'); tb.innerHTML=h; markBest(tb,[2,3]); setFrame(0); playing=true; document.getElementById('play').textContent='Pause'; }
   async function init(){ const s=await (await fetch('data/rollout/summary.json?t='+Date.now())).json();
-    let h='<tr><th>model</th><th>horizon</th><th>passes</th><th>mean ADE</th><th>median ADE</th><th>mean FDE</th></tr>';
+    let h='<tr><th>model</th><th>horizon</th><th>passes</th><th>mean ADE</th><th>median ADE</th><th>mean final-frame error</th></tr>';
     for(const k of ['F16','F8','F4']){const m=s[k]; h+=`<tr><td>${LABEL[k]}</td><td>${m.F}</td><td>${m.passes}</td><td>${cm(m.mean_ade_m)}</td><td>${cm(m.median_ade_m)}</td><td>${cm(m.mean_fde_m)}</td></tr>`;}
-    document.getElementById('summary').innerHTML=h; chart(s);
+    const tb=document.getElementById('summary'); tb.innerHTML=h; markBest(tb,[3,4,5]); chart(s);
     const idx=await (await fetch('data/rollout/index.json?t='+Date.now())).json(); const ex=document.getElementById('ex');
-    idx.forEach((w,i)=>{const b=document.createElement('button'); b.textContent=`#${w.rank} · ${cm(w.ade_F16_m)}`; b.className=i===0?'active':'';
-      b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className=''); b.className='active'; loadExample(w.name);}; ex.appendChild(b);});
-    layoutLabels(); if(idx.length) await loadExample(idx[0].name); requestAnimationFrame(loop);
-    addEventListener('resize',()=>{layoutLabels(); chart(s);}); }
+    idx.forEach((w,i)=>{const b=document.createElement('button'); b.textContent=`#${w.rank} · ${cm(w.ade_F16_m)}`; b.className=i===0?'active':''; b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className=''); b.className='active'; loadExample(w.name);}; ex.appendChild(b);});
+    layoutLabels(); if(idx.length) await loadExample(idx[0].name); requestAnimationFrame(loop); addEventListener('resize',()=>{layoutLabels(); chart(s);}); }
   init();
 })();
 </script>

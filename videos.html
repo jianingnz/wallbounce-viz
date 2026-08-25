@@ -1,38 +1,30 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Training data</title>
+<link rel="stylesheet" href="site.css">
 <style>
-  :root{--ink:#111; --soft:#555; --line:#ddd}
-  *{box-sizing:border-box}
-  body{margin:0; background:#fff; color:var(--ink); font-family:"Source Serif Pro",Georgia,"Times New Roman",serif}
-  .wrap{max-width:1280px; margin:0 auto; padding:20px 20px 40px}
+  .wrap{max-width:1400px}
   .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:14px}
-  .cell{border:1px solid var(--line); border-radius:4px; overflow:hidden; background:#000}
+  .cell{border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--line)}
   video{display:block; width:100%; height:auto}
-  .cap{font-size:13px; color:var(--soft); padding:6px 8px; background:#fff; border-top:1px solid var(--line)}
-  .ctl{display:flex; gap:8px; align-items:center; margin:0 0 12px; font-size:13px; color:var(--soft)}
-  .ctl button{font:inherit; padding:3px 10px; border:1px solid var(--line); background:#fff; border-radius:3px; cursor:pointer}
+  .cap{font-size:13px; color:var(--soft); padding:7px 10px; background:#fff}
   @media(max-width:900px){ .grid{grid-template-columns:repeat(2,1fr)} }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="ctl"><button id="all">▶ play all</button><button id="pause">❚❚ pause all</button><span>genesis_2048_mpm_dataset · train split · 2048 MPM particles · 2.5 ms/step, shown at 5% real time</span></div>
+  <div class="ctl" style="margin:0 0 12px"><button id="all">Play all</button><button id="pause">Pause all</button></div>
   <div class="grid" id="grid"></div>
 </div>
 <script>
 (async function(){
   const list = await (await fetch('data/videos/index.json?t=' + Date.now())).json();
   const grid = document.getElementById('grid');
-  for (const v of list) {
-    const d = document.createElement('div'); d.className = 'cell';
-    d.innerHTML = `<video src="data/videos/${v.file}" muted loop playsinline preload="metadata"></video><div class="cap">${v.label}</div>`;
-    grid.appendChild(d);
-  }
+  for (const v of list) { const d = document.createElement('div'); d.className = 'cell';
+    d.innerHTML = `<video src="data/videos/${v.file}" muted loop playsinline preload="metadata"></video><div class="cap">${v.label}</div>`; grid.appendChild(d); }
   const vids = [...document.querySelectorAll('video')];
   document.getElementById('all').onclick = () => vids.forEach(v => v.play());
   document.getElementById('pause').onclick = () => vids.forEach(v => v.pause());
