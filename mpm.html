@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<title>MPM models — live</title>
+<title>MPM models</title>
 <link rel="stylesheet" href="site.css">
 <style>
   .status{font-size:14px; color:var(--soft); margin:0 0 6px}
@@ -87,7 +87,7 @@
     const cv=await (await fetch(`data/curves_${k}.json?t=`+Date.now())).json(); const xm=100000;
     logChart('c_tr','l_tr',[{name:'train',color:'var(--s1)',pts:cv.train_loss},...(cv.train_loss_ema?[{name:'train·EMA',color:'var(--s3)',pts:cv.train_loss_ema}]:[])],xm);
     logChart('c_val','l_val',[{name:'val·live',color:'var(--s2)',pts:cv.val_loss},{name:'val·EMA',color:'var(--s3)',pts:cv.val_loss_ema}],xm);
-    const s=summary[k]; document.getElementById('status').textContent=`${MODELS[k]} — run ${s.run} · training in progress · evaluated checkpoint: step ${s.step.toLocaleString()} / 100,000 · curves through step ${cv.train_loss[cv.train_loss.length-1][0].toLocaleString()}`;
+    const s=summary[k]; document.getElementById('status').textContent=`${MODELS[k]} — run ${s.run} · ${s.done?'training complete (100k steps)':'training in progress'} · evaluated checkpoint: ${s.ckpt||'latest.pt'} @ step ${s.step.toLocaleString()} · curves through step ${cv.train_loss[cv.train_loss.length-1][0].toLocaleString()}`;
     document.getElementById('summary').innerHTML=`<tr><th>checkpoint step</th><th>val windows</th><th>mean ADE</th><th>median ADE</th><th>mean final-frame error</th></tr><tr><td>${s.step.toLocaleString()}</td><td>${s.n_windows}</td><td>${mm(s.mean_ade_mm)}</td><td>${mm(s.median_ade_mm)}</td><td>${mm(s.mean_fde_mm)}</td></tr>`;
     pfChart(s.per_frame_mm);
     const idx=await (await fetch(`data/mpm/${k}/index.json?t=`+Date.now())).json(); const ex=document.getElementById('ex'); ex.innerHTML='';
