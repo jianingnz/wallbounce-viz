@@ -81,7 +81,7 @@
   async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`data/mpm/${cur}/${name}/meta.json${v}`)).json();N=meta.n_particles;C=meta.context_len;T=meta.n_frames;
     const [g,p]=await Promise.all([fetch(`data/mpm/${cur}/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),fetch(`data/mpm/${cur}/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
     bufs={gt:new Float32Array(g),pred:new Float32Array(p)};alloc();document.getElementById('scrub').max=T-1;
-    document.getElementById('excap').textContent=`Example ${meta.rank}/${6} (p${meta.pct} of the error distribution) · ${meta.clip} @ frame ${meta.j} · window ADE ${mm(meta.ade_mm)}, final-frame ${mm(meta.fde_mm)}`;
+    document.getElementById('excap').textContent=`Example ${meta.rank}/${document.querySelectorAll("#ex button").length} (p${meta.pct} of the error distribution) · ${meta.clip} @ frame ${meta.j} · window ADE ${mm(meta.ade_mm)}, final-frame ${mm(meta.fde_mm)}`;
     setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
   async function select(k){cur=k;document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
     const cv=await (await fetch(`data/curves_${k}.json?t=`+Date.now())).json(); const xm=100000;
