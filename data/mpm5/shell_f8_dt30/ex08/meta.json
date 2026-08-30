@@ -1,0 +1,1 @@
+{"rank": 8, "pct": 47, "clip": "ep_00232_shell2048_cube_slam", "j": 471, "n_frames": 13, "n_particles": 2048, "context_len": 5, "ade_mm": 6.35, "fde_mm": 11.37, "per_frame_mm": [1.37, 2.76, 4.18, 5.61, 7.07, 8.44, 9.98, 11.37]}

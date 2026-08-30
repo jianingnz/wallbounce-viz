@@ -1,0 +1,1 @@
+{"rank": 6, "pct": 33, "clip": "ep_00137_shell2048_sphere_slam", "j": 159, "n_frames": 13, "n_particles": 2048, "context_len": 5, "ade_mm": 3.84, "fde_mm": 6.67, "per_frame_mm": [1.03, 1.84, 2.62, 3.48, 4.23, 4.89, 5.95, 6.67]}
