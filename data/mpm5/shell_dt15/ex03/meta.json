@@ -1,1 +1,1 @@
-{"rank": 3, "pct": 14, "clip": "ep_00230_shell2048_sphere_drop", "j": 310, "n_frames": 21, "n_particles": 2048, "context_len": 5, "ade_mm": 1.22, "fde_mm": 2.14, "per_frame_mm": [0.14, 0.31, 0.44, 0.62, 0.76, 0.91, 1.05, 1.17, 1.34, 1.49, 1.62, 1.73, 1.83, 1.9, 2.03, 2.14]}
+{"rank": 3, "pct": 14, "clip": "ep_00205_shell2048_cube_wall", "j": 337, "n_frames": 21, "n_particles": 2048, "context_len": 5, "ade_mm": 1.14, "fde_mm": 2.35, "per_frame_mm": [0.12, 0.26, 0.37, 0.49, 0.6, 0.71, 0.83, 0.96, 1.12, 1.29, 1.48, 1.65, 1.82, 2.0, 2.16, 2.35]}
