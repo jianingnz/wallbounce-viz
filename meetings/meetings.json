@@ -5,7 +5,7 @@
    "date": "2026-08-25",
    "items": [
     {
-     "label": "Δt study",
+     "label": "\u0394t study",
      "src": "../dt.html"
     },
     {
@@ -19,6 +19,16 @@
     {
      "label": "MPM models (live)",
      "src": "../mpm.html"
+    }
+   ]
+  },
+  {
+   "id": "2026-09-01",
+   "date": "2026-09-01",
+   "items": [
+    {
+     "label": "MPM models \u2014 5 runs (live)",
+     "src": "../mpm5.html"
     }
    ]
   }

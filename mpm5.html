@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>MPM models — 5 runs</title>
+<link rel="stylesheet" href="site.css">
+<style>
+  .status{font-size:14px; color:var(--soft); margin:0 0 6px}
+  svg{display:block; width:100%; height:220px}
+  #stage{height:520px}
+  .lbl{top:8px} .lbl.l{left:10px} .lbl.r{left:calc(50% + 10px)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="tabs" id="mtabs"></div>
+  <div class="status" id="status"></div>
+  <h2>Training curves</h2>
+  <div class="charts">
+    <div><svg id="c_tr"></svg><div class="leg" id="l_tr"></div><p class="caption">Training loss (denoising MSE, log scale)</p></div>
+    <div><svg id="c_val"></svg><div class="leg" id="l_val"></div><p class="caption">Validation loss (log scale) — live and EMA weights</p></div>
+  </div>
+  <h2>Model performance — one-shot rollout at 2.5 ms steps on val windows (current checkpoint)</h2>
+  <table id="summary"></table>
+  <svg id="c_pf"></svg><p class="caption">Per-frame error (mm) at each predicted frame (2.5 ms apart), averaged over the val windows.</p>
+  <div class="ex" id="ex"></div>
+  <p class="caption" id="excap"></p>
+  <div id="stage"><canvas id="c"></canvas><div class="lbl l"><b>ground truth</b><br><span class="m" id="m_gt"></span></div><div class="lbl r" style="color:var(--pred)"><b>prediction</b><br><span class="m" id="m_pr"></span></div></div>
+  <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="20" value="0" step="1"><span class="mono" id="frame">1 / 21</span><span class="mono" id="ade"></span><button id="ovl">GT → prediction vectors</button></div>
+  <p class="caption">5 context frames (2.5 ms apart) → F predicted frames. Drag to orbit, scroll to zoom, shared camera.</p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+  const MODELS={sand_dt15:'sand · F16 · Δt 2.5–15 ms', shell_dt15:'cube+sphere · F16 · Δt 2.5–15 ms', all_dt15:'all three · F16 · Δt 2.5–15 ms', shell_dt50:'cube+sphere · F16 · mixed Δt 2.5–50 ms', shell_f8_dt30:'cube+sphere · F8 · Δt 2.5–30 ms'};
+  let cur='sand', meta=null, bufs=null, N=2048, C=5, T=21, summary={};
+  const mm=v=>v.toFixed(2)+' mm';
+
+  function logChart(id, legId, series, xmax){
+    const svg=document.getElementById(id); const W=Math.max(svg.clientWidth,360),H=220,L=56,R=12,Tp=8,B=24; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    const vals=series.flatMap(s=>s.pts.map(p=>p[1])).filter(v=>v>0); if(!vals.length){svg.innerHTML='';return;}
+    const lo=Math.pow(10,Math.floor(Math.log10(Math.min(...vals)))), hi=Math.pow(10,Math.ceil(Math.log10(Math.max(...vals))));
+    const X=s=>L+(W-L-R)*s/xmax, Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+    let g=''; for(let d=lo; d<=hi; d*=10){ g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="#e5e5ea"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${d.toExponential(0)}</text>`; }
+    for(const s of [0,0.25,0.5,0.75,1]) g+=`<text x="${X(s*xmax)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#6e6e73">${s*xmax/1000}k</text>`;
+    for(const s of series) g+=`<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="1.8"/>`;
+    svg.innerHTML=g; document.getElementById(legId).innerHTML=series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('');
+  }
+  function pfChart(pf){ const svg=document.getElementById('c_pf'); const W=Math.max(svg.clientWidth,360),H=200,L=50,R=12,Tp=8,B=24; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    const nF=pf.length; const ymax=Math.max(...pf)*1.1; const X=i=>L+(W-L-R)*(i-1)/(nF-1), Y=v=>Tp+(H-Tp-B)*(1-v/ymax); let g='';
+    for(let k=0;k<=4;k++){const v=ymax*k/4; g+=`<line x1="${L}" y1="${Y(v)}" x2="${W-R}" y2="${Y(v)}" stroke="#e5e5ea"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${v.toFixed(1)}</text>`;}
+    for(let i=1;i<=nF;i++) g+=`<text x="${X(i)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#6e6e73">+${i}</text>`;
+    g+=`<path d="${pf.map((v,i)=>(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="#ff9500" stroke-width="2.2"/>`; svg.innerHTML=g; }
+
+  // viewer
+  const sprite=vizDisc(); let ovOn=false;
+  function makeView(color){const scene=new THREE.Scene();scene.background=new THREE.Color('#f5f5f7');const geo=new THREE.BufferGeometry();
+    const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.012,map:sprite,color,transparent:true,alphaTest:0.35,depthWrite:true,sizeAttenuation:true}));pts.frustumCulled=false;scene.add(pts);
+    const boxGeo=new THREE.BoxGeometry(1,1.2,1);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));edges.position.set(0.5,0.6,0.5);scene.add(edges);
+    const grid=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);grid.position.set(0.5,0,0.5);scene.add(grid);return {scene,geo};}
+  const V_gt=makeView(0x0a84ff), V_pr=makeView(0xff9500); const ov=makeOverlay(V_pr.scene,sprite,0.008);
+  function alloc(){for(const V of [V_gt,V_pr]) V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3)); ov.alloc(N);}
+  function adeF(f){let s=0;for(let i=0;i<N;i++){const o=(f*N+i)*3;const dx=bufs.pred[o]-bufs.gt[o],dy=bufs.pred[o+1]-bufs.gt[o+1],dz=bufs.pred[o+2]-bufs.gt[o+2];s+=Math.sqrt(dx*dx+dy*dy+dz*dz);}return s/N*1000;}
+  let frame=0,playing=true,last=0; const DT_MS=2.5; const getSpeed=makeSpeed(document.getElementById('play').parentElement); const clock=makeClock(getSpeed);
+  function setFrame(f){if(!bufs)return;frame=f;for(const [V,b] of [[V_gt,bufs.gt],[V_pr,bufs.pred]]){V.geo.attributes.position.array.set(b.subarray(f*N*3,f*N*3+N*3));V.geo.attributes.position.needsUpdate=true;} ov.update(bufs.gt,bufs.pred,f,f,N);
+    const ctx=f<C; document.getElementById('m_gt').textContent=ctx?`context ${f+1}/${C}`:`frame +${f-C+1}`; document.getElementById('m_pr').textContent=ctx?`context ${f+1}/${C}`:`frame +${f-C+1} · err ${adeF(f).toFixed(2)} mm`;
+    document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`${f+1} / ${T} · ${(f*DT_MS).toFixed(1)} ms`; document.getElementById('ade').textContent=ctx?'':`ADE ${adeF(f).toFixed(2)} mm`;}
+  const canvas=document.getElementById('c');const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setScissorTest(true);
+  const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.6,1.1,1.8);const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0.5,0.4,0.5);controls.enableDamping=true;controls.dampingFactor=0.08;controls.minDistance=0.05;controls.maxDistance=10;
+  function render(){const w=canvas.clientWidth,h=canvas.clientHeight,half=Math.floor(w/2);if(!w||!h)return;const pr=renderer.getPixelRatio();if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr))renderer.setSize(w,h,false);
+    camera.aspect=half/h;camera.updateProjectionMatrix();renderer.setViewport(0,0,half,h);renderer.setScissor(0,0,half,h);renderer.render(V_gt.scene,camera);renderer.setViewport(half,0,w-half,h);renderer.setScissor(half,0,w-half,h);renderer.render(V_pr.scene,camera);}
+  function loop(t){controls.update();if(bufs){const f=Math.min(T-1,Math.round(clock.tick(t,playing,(T-1)*DT_MS)/DT_MS)); if(f!==frame) setFrame(f);}render();requestAnimationFrame(loop);}
+  document.getElementById('play').onclick=function(){playing=!playing;this.textContent=playing?'Pause':'Play';};
+  document.getElementById('ovl').onclick=function(){ovOn=!ovOn;this.classList.toggle('active',ovOn);ov.setVisible(ovOn);setFrame(frame);};
+  document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='Play';setFrame(+this.value);clock.set(frame*DT_MS);};
+
+  async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`data/mpm5/${cur}/${name}/meta.json${v}`)).json();N=meta.n_particles;C=meta.context_len;T=meta.n_frames;
+    const [g,p]=await Promise.all([fetch(`data/mpm5/${cur}/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),fetch(`data/mpm5/${cur}/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
+    bufs={gt:new Float32Array(g),pred:new Float32Array(p)};alloc();document.getElementById('scrub').max=T-1;
+    document.getElementById('excap').textContent=`Example ${meta.rank}/${document.querySelectorAll("#ex button").length} (p${meta.pct} of the error distribution) · ${meta.clip} @ frame ${meta.j} · window ADE ${mm(meta.ade_mm)}, final-frame ${mm(meta.fde_mm)}`;
+    setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
+  async function select(k){cur=k;document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
+    const cr=await fetch(`data/curves_${k}.json?t=`+Date.now()); const cv=cr.ok?await cr.json():{train_loss:[],val_loss:[],val_loss_ema:[]}; const xm=100000;
+    logChart('c_tr','l_tr',[{name:'train',color:'var(--s1)',pts:cv.train_loss},...(cv.train_loss_ema?[{name:'train·EMA',color:'var(--s3)',pts:cv.train_loss_ema}]:[])],xm);
+    logChart('c_val','l_val',[{name:'val·live',color:'var(--s2)',pts:cv.val_loss},{name:'val·EMA',color:'var(--s3)',pts:cv.val_loss_ema}],xm);
+    const s=summary[k]||{run:k,status:'not exported yet',step:0}; const last=cv&&cv.train_loss&&cv.train_loss.length?cv.train_loss[cv.train_loss.length-1][0]:0;
+    document.getElementById('status').textContent=`${MODELS[k]} — run ${s.run} · ${s.status||''}${s.ckpt?` · evaluated checkpoint: ${s.ckpt} @ step ${s.step.toLocaleString()}`:''} · curves through step ${last.toLocaleString()}`;
+    if(!s.ckpt){ document.getElementById('summary').innerHTML=''; document.getElementById('c_pf').innerHTML=''; document.getElementById('ex').innerHTML=''; document.getElementById('excap').textContent='No checkpoint evaluated yet.'; bufs=null; return; }
+    const bo=s.by_object_ade_mm?Object.entries(s.by_object_ade_mm).map(([g,v])=>`${g} ${mm(v)}`).join(' · '):'';
+    document.getElementById('summary').innerHTML=`<tr><th>checkpoint step</th><th>horizon</th><th>val windows</th><th>mean ADE</th><th>median ADE</th><th>mean final-frame error</th><th>by object</th></tr><tr><td>${s.step.toLocaleString()}</td><td>${s.future_len} × 2.5 ms</td><td>${s.n_windows}</td><td>${mm(s.mean_ade_mm)}</td><td>${mm(s.median_ade_mm)}</td><td>${mm(s.mean_fde_mm)}</td><td>${bo}</td></tr>`;
+    pfChart(s.per_frame_mm);
+    const idx=await (await fetch(`data/mpm5/${k}/index.json?t=`+Date.now())).json(); const ex=document.getElementById('ex'); ex.innerHTML='';
+    idx.forEach((w,i)=>{const b=document.createElement('button');b.textContent=`#${w.rank} · ${mm(w.ade_mm)}`;b.className=i===0?'active':'';b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(w.name);};ex.appendChild(b);});
+    if(idx.length) await loadEx(idx[0].name);}
+  async function init(){summary=await (await fetch('data/mpm5/summary.json?t='+Date.now())).json();const mt=document.getElementById('mtabs');
+    for(const k of Object.keys(MODELS)){const b=document.createElement('button');b.dataset.k=k;b.textContent=MODELS[k];b.onclick=()=>select(k);mt.appendChild(b);}
+    await select('sand_dt15'); requestAnimationFrame(loop); addEventListener('resize',()=>select(cur));}
+  init();
+})();
+</script>
+</body>
+</html>

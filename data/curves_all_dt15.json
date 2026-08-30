@@ -1,0 +1,1 @@
+{"run": "mpm_all2048_dt15 \u2014 implicit \u0394t, 2048 pts; through step 0 (full-precision wandb curves)", "r_delta": 0.018199374675750734, "train_loss": [[0, 0.04722180217504501]], "val_loss": [], "val_loss_ema": []}
