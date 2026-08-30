@@ -16,7 +16,8 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="ctl" style="margin:0 0 12px"><button id="all">Play all</button><button id="pause">Pause all</button></div>
+  <div class="ctl" style="margin:0 0 12px"><button id="all">Play all</button><button id="pause">Pause all</button><span class="mono" style="color:var(--soft);font-size:12px">5 ms of physics per video frame · real time = 8× playback</span></div>
+<script src="overlay.js?v=2"></script>
   <div class="grid" id="grid"></div>
 </div>
 <script>
@@ -26,6 +27,7 @@
   for (const v of list) { const d = document.createElement('div'); d.className = 'cell';
     d.innerHTML = `<video src="data/videos/${v.file}" muted loop playsinline preload="metadata"></video><div class="cap">${v.label}</div>`; grid.appendChild(d); }
   const vids = [...document.querySelectorAll('video')];
+  const RT=8; let getSpeed=()=>1; const applyRate=()=>vids.forEach(v=>{v.playbackRate=RT/getSpeed();}); getSpeed=makeSpeed(document.querySelector('.ctl'),[[1,'Real time'],[2,'½ speed'],[4,'¼ speed'],[8,'1/8 speed']],applyRate); applyRate(); vids.forEach(v=>v.addEventListener('loadedmetadata',applyRate));
   document.getElementById('all').onclick = () => vids.forEach(v => v.play());
   document.getElementById('pause').onclick = () => vids.forEach(v => v.pause());
   vids.forEach(v => { v.onclick = () => v.paused ? v.play() : v.pause(); });

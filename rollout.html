@@ -25,12 +25,12 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="overlay.js"></script>
+<script src="overlay.js?v=2"></script>
 <script>
 (function(){
   const PANES=[['gt','ground truth',0x0a84ff],['F16','joint 16-frame model',0xff9500],['F8','8-frame model · 2 AR passes',0xaf52de],['F4','4-frame model · 4 AR passes',0x34c759]];
   const LABEL={F16:'joint 16 (1 pass)',F8:'8-frame × 2 passes',F4:'4-frame × 4 passes'}; const COLOR={F16:'#ff9500',F8:'#af52de',F4:'#34c759'};
-  const COLS=2, ROWS=2, FPS=3; const cm=v=>(v*100).toFixed(1)+' cm';
+  const COLS=2, ROWS=2; const cm=v=>(v*100).toFixed(1)+' cm';
   let meta=null, bufs={}, N=128, C=5, T=21, ovOn=false; const sprite=vizDisc();
   function makeView(color){ const scene=new THREE.Scene(); scene.background=new THREE.Color('#f5f5f7'); const geo=new THREE.BufferGeometry();
     const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.03,map:sprite,color,transparent:true,alphaTest:0.35,depthWrite:true,sizeAttenuation:true})); pts.frustumCulled=false; scene.add(pts);
@@ -39,13 +39,13 @@
   const views=PANES.map(p=>makeView(p[2])); const ovs=PANES.map(([k],i)=>k==='gt'?null:makeOverlay(views[i].scene,sprite,0.02));
   function alloc(){ views.forEach(V=>V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3))); ovs.forEach(o=>o&&o.alloc(N)); }
   function errAt(key,f){ const g=bufs.gt,p=bufs[key]; let s=0; for(let i=0;i<N;i++){const o=(f*N+i)*3; const dx=p[o]-g[o],dy=p[o+1]-g[o+1],dz=p[o+2]-g[o+2]; s+=Math.sqrt(dx*dx+dy*dy+dz*dz);} return s/N*10; }
-  let frame=0, playing=true, last=0;
+  let frame=0, playing=true, last=0; const getSpeed=makeSpeed(document.getElementById('play').parentElement); const clock=makeClock(getSpeed);
   function setFrame(f){ if(!meta) return; frame=f;
     PANES.forEach(([key],i)=>{ views[i].geo.attributes.position.array.set(bufs[key].subarray(f*N*3,f*N*3+N*3)); views[i].geo.attributes.position.needsUpdate=true; if(ovs[i]) ovs[i].update(bufs.gt,bufs[key],f,f,N);
       const el=document.getElementById('lbl_'+key); if(!el) return; const ctx=f<C;
       if(key==='gt') el.querySelector('.m').textContent= ctx?`context ${f+1}/${C}`:`frame +${f-C+1}`;
       else { const m=meta.models[key], k=f-C; el.querySelector('.m').textContent= ctx?`context ${f+1}/${C}`:`pass ${Math.floor(k/m.F)+1}/${m.passes} · frame ${k%m.F+1}/${m.F} · err ${errAt(key,f).toFixed(3)} m`; } });
-    document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`${f+1} / ${T}`; }
+    document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`${f+1} / ${T} · ${(f*(meta.dt_ms||1000/24)).toFixed(0)} ms`; }
   const canvas=document.getElementById('c'); const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setScissorTest(true);
   const camera=new THREE.PerspectiveCamera(42,1,0.01,100); camera.position.set(1.45,0.95,1.65); const controls=new THREE.OrbitControls(camera,canvas);
   controls.target.set(0.5,0.5,0.5); controls.enableDamping=true; controls.dampingFactor=0.08; controls.minDistance=0.05; controls.maxDistance=10;
@@ -55,9 +55,9 @@
   function render(){ const w=canvas.clientWidth,h=canvas.clientHeight; if(!w||!h) return; const pr=renderer.getPixelRatio(); if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)){renderer.setSize(w,h,false); layoutLabels();}
     const pw=Math.floor(w/COLS),ph=Math.floor(h/ROWS); camera.aspect=pw/ph; camera.updateProjectionMatrix();
     views.forEach((V,i)=>{const x=(i%COLS)*pw,y=(ROWS-1-Math.floor(i/COLS))*ph; renderer.setViewport(x,y,pw,ph); renderer.setScissor(x,y,pw,ph); renderer.render(V.scene,camera);}); }
-  function loop(t){ controls.update(); if(playing&&meta&&t-last>1000/FPS){ setFrame((frame+1)%T); last=t; } render(); requestAnimationFrame(loop); }
+  function loop(t){ controls.update(); if(meta){ const dt=meta.dt_ms||1000/24; const f=Math.min(T-1,Math.round(clock.tick(t,playing,(T-1)*dt)/dt)); if(f!==frame) setFrame(f); } render(); requestAnimationFrame(loop); }
   document.getElementById('play').onclick=function(){playing=!playing; this.textContent=playing?'Pause':'Play';};
-  document.getElementById('scrub').oninput=function(){playing=false; document.getElementById('play').textContent='Play'; setFrame(+this.value);};
+  document.getElementById('scrub').oninput=function(){playing=false; document.getElementById('play').textContent='Play'; setFrame(+this.value); clock.set(frame*(meta.dt_ms||1000/24));};
   document.getElementById('ovl').onclick=function(){ovOn=!ovOn; this.classList.toggle('active',ovOn); ovs.forEach(o=>o&&o.setVisible(ovOn)); setFrame(frame);};
   function chart(summary){ const svg=document.getElementById('chart'); const W=Math.max(svg.clientWidth,400),H=230,L=52,R=14,Tp=10,B=26; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
     const keys=['F16','F8','F4']; const ymax=Math.max(...keys.flatMap(k=>summary[k].per_frame_m))*1.08; const X=i=>L+(W-L-R)*(i-1)/15, Y=v=>Tp+(H-Tp-B)*(1-v/ymax); let g='';

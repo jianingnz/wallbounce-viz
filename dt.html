@@ -24,11 +24,11 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="overlay.js"></script>
+<script src="overlay.js?v=2"></script>
 <script>
 (function(){
   const PANES=[['gt','ground truth'],['fixed42','fixed-Δt model · 42 ms'],['dti42','implicit-Δt · 42 ms'],['dti84','implicit-Δt · 84 ms'],['dti125','implicit-Δt · 125 ms (never trained)'],['dti167','implicit-Δt · 167 ms']];
-  const LABEL=Object.fromEntries(PANES.slice(1)); const SLOW=10, COLS=3, ROWS=2;
+  const LABEL=Object.fromEntries(PANES.slice(1)); const COLS=3, ROWS=2;
   const cm=v=>(v*100).toFixed(1)+' cm';
   let meta=null, bufs={}, N=128, C=5, NAT=1000/24, tEnd=1000, ovOn=false;
   const sprite=vizDisc();
@@ -43,7 +43,7 @@
     if(key==='gt') return Math.min(meta.gt_frames-1, C-1+Math.floor((t-tA)/NAT)); const s=meta.settings[key]; return Math.min(s.n_frames-1, C-1+Math.floor((t-tA)/s.dt_ms)); }
   function nativeIndexOf(key,f){ if(key==='gt'||f<C) return f; const s=meta.settings[key]; return Math.min(meta.gt_frames-1, C-1+Math.round((f-C+1)*s.dt_ms/NAT)); }
   function adeAt(key,f){ const g=bufs.gt,p=bufs[key],gi=nativeIndexOf(key,f); let s=0; for(let i=0;i<N;i++){const o=(f*N+i)*3,og=(gi*N+i)*3; const dx=p[o]-g[og],dy=p[o+1]-g[og+1],dz=p[o+2]-g[og+2]; s+=Math.sqrt(dx*dx+dy*dy+dz*dz);} return s/N*10; }
-  let tNow=0, playing=true, last=0;
+  let tNow=0, playing=true, last=0; const getSpeed=makeSpeed(document.getElementById('play').parentElement);
   function setTime(t){ if(!meta) return; tNow=t;
     PANES.forEach(([key],i)=>{ const f=frameAt(key,t); views[i].geo.attributes.position.array.set(bufs[key].subarray(f*N*3,f*N*3+N*3)); views[i].geo.attributes.position.needsUpdate=true;
       if(ovs[i]) ovs[i].update(bufs.gt,bufs[key],nativeIndexOf(key,f),f,N);
@@ -59,7 +59,7 @@
     if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr)){renderer.setSize(w,h,false); layoutLabels();}
     const pw=Math.floor(w/COLS),ph=Math.floor(h/ROWS); camera.aspect=pw/ph; camera.updateProjectionMatrix();
     views.forEach((V,i)=>{const x=(i%COLS)*pw,y=(ROWS-1-Math.floor(i/COLS))*ph; renderer.setViewport(x,y,pw,ph); renderer.setScissor(x,y,pw,ph); renderer.render(V.scene,camera);}); }
-  function loop(ts){ controls.update(); if(playing&&meta){ if(!last) last=ts; let t=tNow+(ts-last)/SLOW; last=ts; if(t>tEnd+250) t=0; setTime(t);} else last=ts; render(); requestAnimationFrame(loop); }
+  function loop(ts){ controls.update(); if(playing&&meta){ if(!last) last=ts; let t=tNow+(ts-last)/getSpeed(); last=ts; if(t>tEnd+700/getSpeed()) t=0; setTime(t);} else last=ts; render(); requestAnimationFrame(loop); }
   document.getElementById('play').onclick=function(){playing=!playing; this.textContent=playing?'Pause':'Play';};
   document.getElementById('scrub').oninput=function(){playing=false; document.getElementById('play').textContent='Play'; setTime(+this.value);};
   document.getElementById('ovl').onclick=function(){ovOn=!ovOn; this.classList.toggle('active',ovOn); ovs.forEach(o=>o&&o.setVisible(ovOn)); setTime(tNow);};
