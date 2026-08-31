@@ -17,6 +17,9 @@
 <div class="wrap">
   <div class="tabs" id="mtabs"></div>
   <div class="status" id="status"></div>
+  <div id="finalcmp" hidden><h2>Final comparison — one-shot ADE (mm) per step size, all five models (final checkpoints)</h2>
+  <div id="fc_tables"></div>
+  <p class="caption">Context: 5 frames. Each cell: mean ADE over the model's full window at that inference step size (16 steps, or 8 for the F8 model — so horizons differ across columns at the same Δt; compare within a column, and across columns at matched physical time via the per-frame curves). † = step size held out of training (interpolation probe). Blank = outside the model's Δt range.</p></div>
   <h2>Training curves</h2>
   <div class="charts">
     <div><svg id="c_tr"></svg><div class="leg" id="l_tr"></div><p class="caption">Training loss (denoising MSE, log scale)</p></div>
@@ -96,7 +99,18 @@
     const idx=await (await fetch(`data/mpm5/${k}/index.json?t=`+Date.now())).json(); const ex=document.getElementById('ex'); ex.innerHTML='';
     idx.forEach((w,i)=>{const b=document.createElement('button');b.textContent=`#${w.rank} · ${mm(w.ade_mm)}`;b.className=i===0?'active':'';b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(w.name);};ex.appendChild(b);});
     if(idx.length) await loadEx(idx[0].name);}
-  async function init(){summary=await (await fetch('data/mpm5/summary.json?t='+Date.now())).json();const mt=document.getElementById('mtabs');
+  async function initFinal(){ try{ const r=await fetch('data/mpm5/final_eval.json?t='+Date.now()); if(!r.ok) return; const fe=await r.json();
+    const srcs={sand:'sand val clips', shell:'cube + sphere val clips'}; const ks=Object.keys(MODELS); let html='';
+    for(const src of ['shell','sand']){ const strides=[...new Set(ks.flatMap(k=>Object.keys((fe[k]||{}).legs||{}).filter(l=>l.startsWith(src+'|inf_')).map(l=>+l.split('_s')[1])))].sort((a,b)=>a-b); if(!strides.length) continue;
+      html+=`<h3 style="font-size:14px;margin:14px 0 6px">${srcs[src]}</h3><div style="overflow-x:auto"><table><tr><th>inference Δt</th>${ks.map(k=>`<th>${MODELS[k].split(' · ').slice(1).join(' · ')}<br><span style="font-weight:400">${MODELS[k].split(' · ')[0]}</span></th>`).join('')}</tr>`;
+      for(const s of strides){ html+=`<tr><td>${(s*2.5).toFixed(1)} ms</td>`; for(const k of ks){ const L=((fe[k]||{}).legs||{})[`${src}|inf_s${s}`]; html+= L?`<td data-v="${L.ade_mm}">${L.ade_mm.toFixed(2)}${L.held_out?' †':''}</td>`:'<td></td>'; } html+='</tr>'; }
+      html+='</table></div>';
+      const ctx=[...new Set(ks.flatMap(k=>Object.keys((fe[k]||{}).legs||{}).filter(l=>l.startsWith(src+'|ctx_')).map(l=>+l.split('_s')[1])))].sort((a,b)=>a-b);
+      if(ctx.length){ html+=`<div style="overflow-x:auto"><table style="margin-top:6px"><tr><th>context Δt (inference 2.5 ms)</th>${ks.map(k=>`<th></th>`).join('')}</tr>`;
+        for(const s of ctx){ html+=`<tr><td>${(s*2.5).toFixed(1)} ms</td>`; for(const k of ks){ const L=((fe[k]||{}).legs||{})[`${src}|ctx_s${s}`]; html+= L?`<td>${L.ade_mm.toFixed(2)}${L.held_out?' †':''}</td>`:'<td></td>'; } html+='</tr>'; } html+='</table></div>'; } }
+    document.getElementById('fc_tables').innerHTML=html; document.getElementById('finalcmp').hidden=false;
+    document.querySelectorAll('#fc_tables table').forEach(t=>{ if(t.querySelector('[data-v]')) markBest(t, [...t.rows[0].cells].map((_,i)=>i).slice(1), true); }); }catch(e){} }
+  async function init(){ initFinal(); summary=await (await fetch('data/mpm5/summary.json?t='+Date.now())).json();const mt=document.getElementById('mtabs');
     for(const k of Object.keys(MODELS)){const b=document.createElement('button');b.dataset.k=k;b.textContent=MODELS[k];b.onclick=()=>select(k);mt.appendChild(b);}
     await select('sand_dt15'); requestAnimationFrame(loop); addEventListener('resize',()=>select(cur));}
   init();
