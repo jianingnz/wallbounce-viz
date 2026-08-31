@@ -16,7 +16,7 @@
 <body>
 <div class="wrap">
   <div class="tabs" id="mtabs"></div>
-  <div class="status" id="status">Full-episode pyramid autoregressive rollout: the model receives ONLY the first 5 ground-truth frames (12.5 ms) and predicts the entire episode, each chunk re-anchored on its own predictions.</div>
+  <div class="status" id="status">Full-episode pyramid autoregressive rollout: the model receives ONLY the first 5 ground-truth frames (12.5 ms) and predicts the entire episode, each chunk re-anchored on its own predictions. Examples span the ranked error distribution — p0 is the best rollout, p100 the worst; the bad end is sampled densely to show failure modes.</div>
   <div class="ex" id="ex"></div>
   <p class="caption" id="excap"></p>
   <div id="stage"><canvas id="c"></canvas><div class="lbl l"><b>ground truth</b><br><span class="m" id="m_gt"></span></div><div class="lbl r" style="color:var(--pred)"><b>prediction</b><br><span class="m" id="m_pr"></span></div></div>
@@ -57,11 +57,11 @@
   async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`data/mpm5roll/${cur}/${name}/meta.json${v}`)).json();N=meta.n_particles;C=meta.context_len;T=meta.n_frames;
     const [g,p]=await Promise.all([fetch(`data/mpm5roll/${cur}/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),fetch(`data/mpm5roll/${cur}/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
     const dq=b=>{const u=new Uint16Array(b),f=new Float32Array(u.length);for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;}; bufs={gt:dq(g),pred:dq(p)};alloc();document.getElementById('scrub').max=T-1;
-    document.getElementById('excap').textContent=`${meta.clip} · ${meta.episode_s}s episode, ${meta.chunks} chunks of ${meta.F} frames from 5 GT context frames · rollout ADE ${mm(meta.ade_mm)}, final-frame ${mm(meta.fde_mm)}`;
+    document.getElementById('excap').textContent=`${meta.pct!==undefined?('p'+meta.pct+' of ranked rollouts · '):''}${meta.clip} · ${meta.episode_s}s episode, ${meta.chunks} chunks of ${meta.F} frames from 5 GT context frames · rollout ADE ${mm(meta.ade_mm)}, final-frame ${mm(meta.fde_mm)}`;
     setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
   async function select(k){cur=k;document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
     const idx=await (await fetch(`data/mpm5roll/${k}/index.json?t=`+Date.now())).json(); const ex=document.getElementById('ex'); ex.innerHTML='';
-    idx.forEach((w,i)=>{const b=document.createElement('button');b.textContent=`${w.clip.split('_').slice(-1)} · ${mm(w.ade_mm)}`;b.className=i===0?'active':'';b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(w.name);};ex.appendChild(b);});
+    idx.forEach((w,i)=>{const b=document.createElement('button');b.textContent=`${w.pct!==undefined?('p'+w.pct+' · '):''}${w.clip.split('_').slice(-1)} · ${mm(w.ade_mm)}`;b.title=w.pct===0?'best rollout':(w.pct===100?'worst rollout':`percentile ${w.pct} of the ranked rollouts`);b.className=i===0?'active':'';b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(w.name);};ex.appendChild(b);});
     if(idx.length) await loadEx(idx[0].name);}
   async function init(){summary={};const mt=document.getElementById('mtabs');
     for(const k of Object.keys(MODELS)){const b=document.createElement('button');b.dataset.k=k;b.textContent=MODELS[k];b.onclick=()=>select(k);mt.appendChild(b);}
