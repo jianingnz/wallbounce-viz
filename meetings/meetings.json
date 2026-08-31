@@ -29,6 +29,10 @@
     {
      "label": "MPM models \u2014 5 runs (live)",
      "src": "../mpm5.html"
+    },
+    {
+     "label": "Full-episode rollouts",
+     "src": "../mpm5roll.html"
     }
    ]
   }

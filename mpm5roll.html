@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>MPM full-episode rollouts</title>
+<link rel="stylesheet" href="site.css">
+<style>
+  .status{font-size:14px; color:var(--soft); margin:0 0 6px}
+  svg{display:block; width:100%; height:220px}
+  #stage{height:520px}
+  .lbl{top:8px} .lbl.l{left:10px} .lbl.r{left:calc(50% + 10px)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="tabs" id="mtabs"></div>
+  <div class="status" id="status">Full-episode pyramid autoregressive rollout: the model receives ONLY the first 5 ground-truth frames (12.5 ms) and predicts the entire episode, each chunk re-anchored on its own predictions.</div>
+  <div class="ex" id="ex"></div>
+  <p class="caption" id="excap"></p>
+  <div id="stage"><canvas id="c"></canvas><div class="lbl l"><b>ground truth</b><br><span class="m" id="m_gt"></span></div><div class="lbl r" style="color:var(--pred)"><b>prediction</b><br><span class="m" id="m_pr"></span></div></div>
+  <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="20" value="0" step="1"><span class="mono" id="frame">1 / 21</span><span class="mono" id="ade"></span><button id="ovl">GT → prediction vectors</button></div>
+  <p class="caption">5 GT context frames → full episode predicted autoregressively (pyramid DF sampler). Playback frames are 5 ms. Drag to orbit, scroll to zoom, shared camera.</p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+  const MODELS={sand_dt15:'sand · F16 · Δt≤15 ms', shell_dt15:'cube+sphere · F16 · Δt≤15 ms', all_dt15:'all three · F16 · Δt≤15 ms', shell_dt50:'cube+sphere · F16 · Δt≤50 ms', shell_f8_dt30:'cube+sphere · F8 · Δt≤30 ms'};
+  let cur='sand', meta=null, bufs=null, N=2048, C=5, T=21, summary={};
+  const mm=v=>v.toFixed(2)+' mm';
+
+  // viewer
+  const sprite=vizDisc(); let ovOn=false;
+  function makeView(color){const scene=new THREE.Scene();scene.background=new THREE.Color('#f5f5f7');const geo=new THREE.BufferGeometry();
+    const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.012,map:sprite,color,transparent:true,alphaTest:0.35,depthWrite:true,sizeAttenuation:true}));pts.frustumCulled=false;scene.add(pts);
+    const boxGeo=new THREE.BoxGeometry(1,1.2,1);const edges=new THREE.LineSegments(new THREE.EdgesGeometry(boxGeo),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));edges.position.set(0.5,0.6,0.5);scene.add(edges);
+    const grid=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);grid.position.set(0.5,0,0.5);scene.add(grid);return {scene,geo};}
+  const V_gt=makeView(0x0a84ff), V_pr=makeView(0xff9500); const ov=makeOverlay(V_pr.scene,sprite,0.008);
+  function alloc(){for(const V of [V_gt,V_pr]) V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3)); ov.alloc(N);}
+  function adeF(f){let s=0;for(let i=0;i<N;i++){const o=(f*N+i)*3;const dx=bufs.pred[o]-bufs.gt[o],dy=bufs.pred[o+1]-bufs.gt[o+1],dz=bufs.pred[o+2]-bufs.gt[o+2];s+=Math.sqrt(dx*dx+dy*dy+dz*dz);}return s/N*1000;}
+  let frame=0,playing=true,last=0; const DT_MS=5; const getSpeed=makeSpeed(document.getElementById('play').parentElement); const clock=makeClock(getSpeed);
+  function setFrame(f){if(!bufs)return;frame=f;for(const [V,b] of [[V_gt,bufs.gt],[V_pr,bufs.pred]]){V.geo.attributes.position.array.set(b.subarray(f*N*3,f*N*3+N*3));V.geo.attributes.position.needsUpdate=true;} ov.update(bufs.gt,bufs.pred,f,f,N);
+    const ctx=f<C; document.getElementById('m_gt').textContent=ctx?`context ${f+1}/${C}`:`frame +${f-C+1}`; document.getElementById('m_pr').textContent=ctx?`context ${f+1}/${C}`:`frame +${f-C+1} · err ${adeF(f).toFixed(2)} mm`;
+    document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`${f+1} / ${T} · ${(f*DT_MS).toFixed(1)} ms`; document.getElementById('ade').textContent=ctx?'':`ADE ${adeF(f).toFixed(2)} mm`;}
+  const canvas=document.getElementById('c');const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setScissorTest(true);
+  const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.6,1.1,1.8);const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0.5,0.4,0.5);controls.enableDamping=true;controls.dampingFactor=0.08;controls.minDistance=0.05;controls.maxDistance=10;
+  function render(){const w=canvas.clientWidth,h=canvas.clientHeight,half=Math.floor(w/2);if(!w||!h)return;const pr=renderer.getPixelRatio();if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr))renderer.setSize(w,h,false);
+    camera.aspect=half/h;camera.updateProjectionMatrix();renderer.setViewport(0,0,half,h);renderer.setScissor(0,0,half,h);renderer.render(V_gt.scene,camera);renderer.setViewport(half,0,w-half,h);renderer.setScissor(half,0,w-half,h);renderer.render(V_pr.scene,camera);}
+  function loop(t){controls.update();if(bufs){const f=Math.min(T-1,Math.round(clock.tick(t,playing,(T-1)*DT_MS)/DT_MS)); if(f!==frame) setFrame(f);}render();requestAnimationFrame(loop);}
+  document.getElementById('play').onclick=function(){playing=!playing;this.textContent=playing?'Pause':'Play';};
+  document.getElementById('ovl').onclick=function(){ovOn=!ovOn;this.classList.toggle('active',ovOn);ov.setVisible(ovOn);setFrame(frame);};
+  document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='Play';setFrame(+this.value);clock.set(frame*DT_MS);};
+
+  async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`data/mpm5roll/${cur}/${name}/meta.json${v}`)).json();N=meta.n_particles;C=meta.context_len;T=meta.n_frames;
+    const [g,p]=await Promise.all([fetch(`data/mpm5roll/${cur}/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),fetch(`data/mpm5roll/${cur}/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
+    const dq=b=>{const u=new Uint16Array(b),f=new Float32Array(u.length);for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;}; bufs={gt:dq(g),pred:dq(p)};alloc();document.getElementById('scrub').max=T-1;
+    document.getElementById('excap').textContent=`${meta.clip} · ${meta.episode_s}s episode, ${meta.chunks} chunks of ${meta.F} frames from 5 GT context frames · rollout ADE ${mm(meta.ade_mm)}, final-frame ${mm(meta.fde_mm)}`;
+    setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
+  async function select(k){cur=k;document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('active',b.dataset.k===k));
+    const idx=await (await fetch(`data/mpm5roll/${k}/index.json?t=`+Date.now())).json(); const ex=document.getElementById('ex'); ex.innerHTML='';
+    idx.forEach((w,i)=>{const b=document.createElement('button');b.textContent=`${w.clip.split('_').slice(-1)} · ${mm(w.ade_mm)}`;b.className=i===0?'active':'';b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(w.name);};ex.appendChild(b);});
+    if(idx.length) await loadEx(idx[0].name);}
+  async function init(){summary={};const mt=document.getElementById('mtabs');
+    for(const k of Object.keys(MODELS)){const b=document.createElement('button');b.dataset.k=k;b.textContent=MODELS[k];b.onclick=()=>select(k);mt.appendChild(b);}
+    await select('sand_dt15'); requestAnimationFrame(loop); addEventListener('resize',()=>select(cur));}
+  init();
+})();
+</script>
+</body>
+</html>
