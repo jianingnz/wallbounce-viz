@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>One big step vs AR rollout</title>
+<link rel="stylesheet" href="site.css">
+<style>svg{display:block;width:100%;height:300px} .leg span{width:18px}</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="tabs" id="tabs"></div>
+  <div class="status" id="status" style="font-size:14px;color:var(--soft);margin:0 0 6px"></div>
+  <svg id="chart"></svg><div class="leg" id="legend"></div>
+  <p class="caption">Mean particle error (mm, log scale) at the big window's frame times. Both arms use the pyramid diffusion-forcing sampler and start from the same 5 ground-truth context frames at the episode start; the AR arm chains 2.5 ms chunks re-anchored on its own last 5 predictions until the same physical endpoint.</p>
+  <table id="tbl"></table>
+</div>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+const NAME={sand_dt15:'sand · F16 · Δt≤15 ms',shell_dt15:'cube+sphere · F16 · Δt≤15 ms',shell_f8_dt30:'cube+sphere · F8 · Δt≤30 ms',shell_dt50:'cube+sphere · F16 · Δt≤50 ms'};
+const SERIES=[['pyramid','big','one coarse window (large Δt) · pyramid','var(--s1)',''],['pyramid','ar','pyramid-AR rollout · 2.5 ms chunks','var(--s2)','']];
+let data=null, cur=null;
+function draw(tag){cur=tag;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.t===tag));
+  const d=data[tag], t=d.oneshot.big.times_ms;
+  document.getElementById('status').textContent=`${NAME[d.model]} — one window of ${d.F} × ${(d.s_big*2.5).toFixed(0)} ms (span ${d.span_ms} ms) vs ${Math.round(d.span_ms/2.5)} × 2.5 ms autoregressive · ${d.oneshot.big.n} val episodes`;
+  const svg=document.getElementById('chart');const W=Math.max(svg.clientWidth,420),H=300,L=52,R=14,Tp=10,B=26;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const all=SERIES.map(s=>d[s[0]][s[1]].per_time_mm).flat().filter(v=>v>0);
+  const lo=Math.pow(10,Math.floor(Math.log10(Math.min(...all)))),hi=Math.pow(10,Math.ceil(Math.log10(Math.max(...all))));
+  const X=v=>L+(W-L-R)*v/t[t.length-1], Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+  let g='';for(let e=lo;e<=hi;e*=10)g+=`<line x1="${L}" y1="${Y(e)}" x2="${W-R}" y2="${Y(e)}" stroke="#e5e5ea"/><text x="${L-6}" y="${Y(e)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${e}</text>`;
+  for(const f of [0.25,0.5,0.75,1])g+=`<text x="${X(f*t[t.length-1])}" y="${H-8}" text-anchor="middle" font-size="11" fill="#6e6e73">${Math.round(f*t[t.length-1])} ms</text>`;
+  for(const [sch,arm,label,color,dash] of SERIES){const pts=d[sch][arm].per_time_mm;
+    g+=`<path d="${pts.map((v,i)=>(i?'L':'M')+X(t[i]).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${color}" stroke-width="2"${dash?` stroke-dasharray="${dash}"`:''}/>`;}
+  svg.innerHTML=g;
+  document.getElementById('legend').innerHTML=SERIES.map(([sc,a,label,color,dash])=>`<span style="background:${dash?'transparent':color};border-top:${dash?'3px dashed '+color:'none'}"></span>${label}`).join('');
+  let h='<tr><th></th><th>ADE (mm)</th><th>error @ endpoint (mm)</th></tr>';
+  for(const [sch,arm,label] of SERIES){const r=d[sch][arm];h+=`<tr><td>${label}</td><td>${r.ade_mm.toFixed(1)}</td><td>${r.fde_mm.toFixed(1)}</td></tr>`;}
+  const tb=document.getElementById('tbl');tb.innerHTML=h;markBest(tb,[1,2]);}
+(async()=>{data=await (await fetch('data/bigstep/bigstep_vs_ar.json?t='+Date.now())).json();
+  const tabs=document.getElementById('tabs');
+  for(const tag of Object.keys(data)){const b=document.createElement('button');b.dataset.t=tag;const d=data[tag];
+    b.textContent=`${NAME[d.model]} @ ${d.span_ms} ms`;b.onclick=()=>draw(tag);tabs.appendChild(b);}
+  draw(Object.keys(data)[0]); addEventListener('resize',()=>draw(cur));})();
+})();
+</script>
+</body>
+</html>

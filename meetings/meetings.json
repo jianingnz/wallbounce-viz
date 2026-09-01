@@ -33,6 +33,10 @@
     {
      "label": "Full-episode rollouts",
      "src": "../mpm5roll.html"
+    },
+    {
+     "label": "Big step vs AR",
+     "src": "../bigstep.html"
     }
    ]
   }
