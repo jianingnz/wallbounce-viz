@@ -24,7 +24,7 @@ let data=null, cur=null;
 function draw(tag){cur=tag;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.t===tag));
   const d=data[tag], t=d.oneshot.big.times_ms;
   document.getElementById('status').textContent=`${NAME[d.model]} — one window of ${d.F} × ${(d.s_big*2.5).toFixed(0)} ms (span ${d.span_ms} ms) vs ${Math.round(d.span_ms/2.5)} × 2.5 ms autoregressive · ${d.oneshot.big.n} val episodes`;
-  const svg=document.getElementById('chart');const W=Math.max(svg.clientWidth,420),H=300,L=52,R=14,Tp=10,B=26;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const svg=document.getElementById('chart');const W=Math.max(svg.clientWidth,420),H=300,L=64,R=14,Tp=10,B=26;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   const all=SERIES.map(s=>d[s[0]][s[1]].per_time_mm).flat().filter(v=>v>0);
   const lo=Math.pow(10,Math.floor(Math.log10(Math.min(...all)))),hi=Math.pow(10,Math.ceil(Math.log10(Math.max(...all))));
   const X=v=>L+(W-L-R)*v/t[t.length-1], Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
@@ -32,7 +32,7 @@ function draw(tag){cur=tag;document.querySelectorAll('#tabs button').forEach(b=>
   for(const f of [0.25,0.5,0.75,1])g+=`<text x="${X(f*t[t.length-1])}" y="${H-8}" text-anchor="middle" font-size="11" fill="#6e6e73">${Math.round(f*t[t.length-1])} ms</text>`;
   for(const [sch,arm,label,color,dash] of SERIES){const pts=d[sch][arm].per_time_mm;
     g+=`<path d="${pts.map((v,i)=>(i?'L':'M')+X(t[i]).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${color}" stroke-width="2"${dash?` stroke-dasharray="${dash}"`:''}/>`;}
-  svg.innerHTML=g;
+  g+=`<text x="14" y="${Tp+ (H-Tp-B)/2}" font-size="11" fill="#6e6e73" transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})" text-anchor="middle">mean particle error (mm)</text>`;svg.innerHTML=g;
   document.getElementById('legend').innerHTML=SERIES.map(([sc,a,label,color,dash])=>`<span style="background:${dash?'transparent':color};border-top:${dash?'3px dashed '+color:'none'}"></span>${label}`).join('');
   let h='<tr><th></th><th>ADE (mm)</th><th>error @ endpoint (mm)</th></tr>';
   for(const [sch,arm,label] of SERIES){const r=d[sch][arm];h+=`<tr><td>${label}</td><td>${r.ade_mm.toFixed(1)}</td><td>${r.fde_mm.toFixed(1)}</td></tr>`;}
