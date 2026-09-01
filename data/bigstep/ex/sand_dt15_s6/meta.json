@@ -1,0 +1,1 @@
+{"clip": "ep_00246_sand2048_cube_slam", "n_particles": 1024, "q_lo": -0.053325071930885315, "q_scale": 0.9690553098917007, "F": 16, "s_big": 6, "span_ms": 240.0, "n_frames_fine": 51, "frame_ms": 5.0, "ctx_frames": 3, "big_ade_mm": 15.6, "ar_ade_mm": 12.0}

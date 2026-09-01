@@ -1,0 +1,1 @@
+{"clip": "ep_00158_shell2048_sphere_slam", "n_particles": 1024, "q_lo": 0.007090434432029724, "q_scale": 0.8864406496286392, "F": 8, "s_big": 12, "span_ms": 240.0, "n_frames_fine": 51, "frame_ms": 5.0, "ctx_frames": 3, "big_ade_mm": 15.0, "ar_ade_mm": 57.2}
