@@ -28,7 +28,7 @@
 <script src="overlay.js?v=2"></script>
 <script>
 (function(){
-  const MODELS={sand_dt15:'sand · F16 · Δt≤15 ms', shell_dt15:'cube+sphere · F16 · Δt≤15 ms', all_dt15:'all three · F16 · Δt≤15 ms', shell_dt50:'cube+sphere · F16 · Δt≤50 ms', shell_f8_dt30:'cube+sphere · F8 · Δt≤30 ms'};
+  const MODELS={sand_dt15:'sand · F16 · 25-step pyramid',sand_dt15_1step:'sand · F16 · 1-step denoising', shell_dt15:'cube+sphere · F16 · Δt≤15 ms', all_dt15:'all three · F16 · Δt≤15 ms', shell_dt50:'cube+sphere · F16 · Δt≤50 ms', shell_f8_dt30:'cube+sphere · F8 · Δt≤30 ms'};
   let cur='sand', meta=null, bufs=null, N=2048, C=5, T=21, summary={};
   const mm=v=>v.toFixed(2)+' mm';
 
