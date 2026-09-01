@@ -25,9 +25,9 @@
     <div><svg id="c_tr"></svg><div class="leg" id="l_tr"></div><p class="caption">Training loss (denoising MSE, log scale)</p></div>
     <div><svg id="c_val"></svg><div class="leg" id="l_val"></div><p class="caption">Validation loss (log scale) — live and EMA weights</p></div>
   </div>
-  <h2>Model performance — one-shot rollout at 2.5 ms steps on val windows (current checkpoint)</h2>
+  <div hidden>
   <table id="summary"></table>
-  <svg id="c_pf"></svg><p class="caption">Per-frame error (mm) at each predicted frame (2.5 ms apart), averaged over the val windows.</p>
+  <svg id="c_pf"></svg></div>
   <div class="ex" id="ex"></div>
   <p class="caption" id="excap"></p>
   <div id="stage"><canvas id="c"></canvas><div class="lbl l"><b>ground truth</b><br><span class="m" id="m_gt"></span></div><div class="lbl r" style="color:var(--pred)"><b>prediction</b><br><span class="m" id="m_pr"></span></div></div>
