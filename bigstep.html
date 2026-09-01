@@ -47,6 +47,7 @@ function draw(tag){cur=tag;document.querySelectorAll('#tabs button').forEach(b=>
   for(const [sch,arm,label] of SERIES){const r=d[sch][arm];h+=`<tr><td>${label}</td><td>${r.ade_mm.toFixed(1)}</td><td>${r.fde_mm.toFixed(1)}</td></tr>`;}
   const tb=document.getElementById('tbl');tb.innerHTML=h;markBest(tb,[1,2]);}
 (async()=>{data=await (await fetch('data/bigstep/bigstep_vs_ar.json?t='+Date.now())).json();
+  for(const h of ['shell_f8_dt30_s12','shell_dt50_s8']) delete data[h];
   const tabs=document.getElementById('tabs');
   for(const tag of Object.keys(data)){const b=document.createElement('button');b.dataset.t=tag;const d=data[tag];
     b.textContent=`${NAME[d.model]} @ ${d.span_ms} ms`;b.onclick=()=>draw(tag);tabs.appendChild(b);}
