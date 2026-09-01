@@ -11,6 +11,8 @@
 <div class="wrap">
   <div class="status" style="font-size:14px;color:var(--soft);margin:0 0 6px">Sand model trained on Δt ∈ {2.5, 5, 10} ms — queried at step sizes inside and beyond that range. Error at matched physical time (same 297 val windows, context 5 × 2.5 ms GT frames, one window of 16 steps per curve).</div>
   <svg id="chart"></svg><div class="leg" id="legend"></div>
+  <h2 style="font-size:15px;margin:18px 0 4px">Penalty relative to the best in-range Δt at the same instant</h2>
+  <svg id="ratio" style="height:220px"></svg>
   <p class="caption">Inside the trained range the curves lie on top of each other — including 7.5 ms, which was <b>never trained</b> but interpolates (dashed blue). Beyond the range (15 / 20 ms, orange/red) the same physical instant costs 12–50 % more error, and the gap widens with time. This measurement motivated training the wide-Δt models.</p>
   <table id="tbl"></table>
 </div>
@@ -26,16 +28,27 @@ const CURVES=[
  ['20 ms · OUT OF RANGE',20,'#ff3b30','',[1.32,2.64,4.47,7.55,12.78,18.01,23.14,32.53,46.34,61.32,74.19,84.84,96.33,107.92,118.15,126.28]]];
 const svg=document.getElementById('chart');
 function draw(){const W=Math.max(svg.clientWidth,420),H=340,L=64,R=14,Tp=10,B=28;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
- const tmax=320,lo=0.1,hi=1000;
+ const tmax=320,lo=0.1,hi=200;
  const X=t=>L+(W-L-R)*t/tmax, Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
  let g='';for(let e=lo;e<=hi;e*=10)g+=`<line x1="${L}" y1="${Y(e)}" x2="${W-R}" y2="${Y(e)}" stroke="#e5e5ea"/><text x="${L-6}" y="${Y(e)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${e<1?e:e.toFixed(0)}</text>`;
  for(const t of [0,80,160,240,320])g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#6e6e73">${t} ms</text>`;
  g+=`<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#6e6e73" transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})" text-anchor="middle">mean particle error (mm)</text>`;
- for(const [label,dt,color,dash,pts] of CURVES)
-   g+=`<path d="${pts.map((v,i)=>(i?'L':'M')+X((i+1)*dt).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${color}" stroke-width="2"${dash?` stroke-dasharray="${dash}"`:''}/>`;
+ for(const [label,dt,color,dash,pts] of CURVES){const ood=color.startsWith('#ff');
+   g+=`<path d="${pts.map((v,i)=>(i?'L':'M')+X((i+1)*dt).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${color}" stroke-width="${ood?3:1.6}"${ood?'':' opacity="0.85"'}${dash?` stroke-dasharray="${dash}"`:''}/>`;}
  svg.innerHTML=g;
  document.getElementById('legend').innerHTML=CURVES.map(([label,dt,color,dash])=>`<span style="background:${dash?'transparent':color};border-top:${dash?'3px dashed '+color:'none'}"></span>${label}`).join('');}
-draw();addEventListener('resize',draw);
+function drawRatio(){const svg2=document.getElementById('ratio');const W=Math.max(svg2.clientWidth,420),H=220,L=64,R=14,Tp=10,B=28;svg2.setAttribute('viewBox',`0 0 ${W} ${H}`);
+ const ref={};
+ for(const c of CURVES){if(c[2].startsWith('#ff'))continue;c[4].forEach((v,i)=>{const t=Math.round((i+1)*c[1]*10)/10;if(!(t in ref)||v<ref[t])ref[t]=v;});}
+ const tmax=170,rmax=3.2;const X=t=>L+(W-L-R)*t/tmax,Y=v=>Tp+(H-Tp-B)*(1-(v-0.8)/(rmax-0.8));let g='';
+ for(const r of [1,1.5,2,2.5,3])g+=`<line x1="${L}" y1="${Y(r)}" x2="${W-R}" y2="${Y(r)}" stroke="${r===1?'#8e8e93':'#e5e5ea'}"${r===1?' stroke-width="1.5"':''}/><text x="${L-6}" y="${Y(r)+4}" text-anchor="end" font-size="11" fill="#6e6e73">${r}×</text>`;
+ for(const t of [0,40,80,120,160])g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#6e6e73">${t} ms</text>`;
+ g+=`<text x="${X(80)}" y="${Y(1)-6}" font-size="11" fill="#8e8e93">in-range baseline (1×)</text>`;
+ for(const c of CURVES){if(!c[2].startsWith('#ff'))continue;const pts=[];c[4].forEach((v,i)=>{const t=Math.round((i+1)*c[1]*10)/10;if(t in ref&&t<=tmax)pts.push([t,v/ref[t]]);});
+  g+=`<path d="${pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(Math.min(p[1],rmax)).toFixed(1)).join('')}" fill="none" stroke="${c[2]}" stroke-width="3"/>`;
+  pts.forEach(p=>{g+=`<circle cx="${X(p[0])}" cy="${Y(Math.min(p[1],rmax))}" r="3" fill="${c[2]}"/>`;});}
+ svg2.innerHTML=g;}
+draw();drawRatio();addEventListener('resize',()=>{draw();drawRatio();});
 const rows=[[60,3.43,3.85,4.47],[120,12.00,15.74,18.01],[160,21.84,null,32.53]];
 let h='<tr><th>physical time</th><th>best in-range</th><th>15 ms (OOD)</th><th>20 ms (OOD)</th></tr>';
 for(const [t,a,b,c] of rows)h+=`<tr><td>${t} ms</td><td class="best">${a.toFixed(2)}</td><td>${b?b.toFixed(2)+' (+'+Math.round(100*(b/a-1))+'%)':'—'}</td><td>${c.toFixed(2)} (+${Math.round(100*(c/a-1))}%)</td></tr>`;
