@@ -14,7 +14,16 @@
   <svg id="chart"></svg><div class="leg" id="legend"></div>
   <p class="caption">Mean particle error (mm, log scale) at the big window's frame times. Both arms use the pyramid diffusion-forcing sampler and start from the same 5 ground-truth context frames at the episode start; the AR arm chains 2.5 ms chunks re-anchored on its own last 5 predictions until the same physical endpoint.</p>
   <table id="tbl"></table>
+  <h2 style="font-size:15px;margin:18px 0 4px">3D example — ground truth | one coarse window | AR rollout</h2>
+  <div id="stage3" style="height:420px;position:relative"><canvas id="c3" style="width:100%;height:100%;display:block"></canvas>
+    <div class="lbl" style="position:absolute;top:8px;left:10px"><b>ground truth</b></div>
+    <div class="lbl" style="position:absolute;top:8px;left:34%"><b style="color:var(--s1)">coarse window</b> <span id="e_big"></span></div>
+    <div class="lbl" style="position:absolute;top:8px;left:67%"><b style="color:var(--s2)">AR rollout</b> <span id="e_ar"></span></div></div>
+  <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="100" value="0" step="1"><span class="mono" id="frame"></span></div>
+  <p class="caption" id="excap3">Shared camera, real-time clock. The coarse pane holds each large-Δt frame until its next step lands; the AR pane updates every 5 ms.</p>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
 <script>
 (function(){
@@ -41,7 +50,43 @@ function draw(tag){cur=tag;document.querySelectorAll('#tabs button').forEach(b=>
   const tabs=document.getElementById('tabs');
   for(const tag of Object.keys(data)){const b=document.createElement('button');b.dataset.t=tag;const d=data[tag];
     b.textContent=`${NAME[d.model]} @ ${d.span_ms} ms`;b.onclick=()=>draw(tag);tabs.appendChild(b);}
-  draw(Object.keys(data)[0]); addEventListener('resize',()=>draw(cur));})();
+  draw(Object.keys(data)[0]); addEventListener('resize',()=>draw(cur)); initViz();})();
+
+// ---- 3D triple viewer ----
+let vz=null;
+async function loadViz(tag){ try{ const v='?t='+Date.now(); const meta=await (await fetch(`data/bigstep/ex/${tag}/meta.json${v}`)).json();
+  const dq=b=>{const u=new Uint16Array(b),f=new Float32Array(u.length);for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;};
+  const [g,a,bg]=await Promise.all(['gt','ar','big'].map(n=>fetch(`data/bigstep/ex/${tag}/${n}.bin${v}`).then(r=>r.arrayBuffer())));
+  vz.meta=meta; vz.gt=dq(g); vz.ar=dq(a); vz.big=dq(bg); vz.N=meta.n_particles; vz.T=meta.n_frames_fine;
+  document.getElementById('e_big').textContent=`· ADE ${meta.big_ade_mm} mm`; document.getElementById('e_ar').textContent=`· ADE ${meta.ar_ade_mm} mm`;
+  document.getElementById('excap3').textContent=`${meta.clip} · one window of ${meta.F} × ${(meta.s_big*2.5).toFixed(0)} ms vs AR at 2.5 ms (both pyramid) · span ${meta.span_ms} ms. Shared camera, real-time clock; coarse pane holds each large-Δt frame.`;
+  for(const V of vz.views) V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(vz.N*3),3));
+  document.getElementById('scrub').max=vz.T-1; vz.frame=-1; setF(0); vz.playing=true; document.getElementById('play').textContent='Pause';
+  document.getElementById('stage3').style.display=''; }catch(e){ document.getElementById('stage3').style.display='none'; } }
+function setF(f){ if(!vz.gt) return; vz.frame=f; const t=f*5;
+  const kBig=Math.max(0,Math.min(vz.meta.F-1,Math.floor((t-10)/(vz.meta.s_big*2.5))));
+  const srcs=[vz.gt.subarray(f*vz.N*3,(f+1)*vz.N*3), t<12.5?vz.gt.subarray(f*vz.N*3,(f+1)*vz.N*3):vz.big.subarray(kBig*vz.N*3,(kBig+1)*vz.N*3), vz.ar.subarray(f*vz.N*3,(f+1)*vz.N*3)];
+  vz.views.forEach((V,i)=>{V.geo.attributes.position.array.set(srcs[i]);V.geo.attributes.position.needsUpdate=true;});
+  document.getElementById('scrub').value=f; document.getElementById('frame').textContent=`physics t = ${(t/1000).toFixed(2)} s`; }
+function initViz(){ const canvas=document.getElementById('c3'); const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setScissorTest(true); const sprite=vizDisc();
+  const mk=c=>{const scene=new THREE.Scene();scene.background=new THREE.Color('#f5f5f7');
+    const geo=new THREE.BufferGeometry();const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:0.014,map:sprite,color:c,transparent:true,alphaTest:0.35,sizeAttenuation:true}));pts.frustumCulled=false;scene.add(pts);
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1.2,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));edges.position.set(0.5,0.6,0.5);scene.add(edges);
+    const grid=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);grid.position.set(0.5,0,0.5);scene.add(grid);return {scene,geo};};
+  vz={views:[mk(0x1d1d1f),mk(0x0a84ff),mk(0xff9500)],playing:true,frame:0,gt:null};
+  const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.6,1.1,1.8);
+  const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0.5,0.4,0.5);controls.enableDamping=true;
+  const getSpeed=makeSpeed(document.getElementById('play').parentElement); const clock=makeClock(getSpeed);
+  document.getElementById('play').onclick=function(){vz.playing=!vz.playing;this.textContent=vz.playing?'Pause':'Play';};
+  document.getElementById('scrub').oninput=function(){vz.playing=false;document.getElementById('play').textContent='Play';setF(+this.value);clock.set(vz.frame*5);};
+  function render(){const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;const pr=renderer.getPixelRatio();
+    if(canvas.width!==Math.floor(w*pr)||canvas.height!==Math.floor(h*pr))renderer.setSize(w,h,false);const third=Math.floor(w/3);
+    vz.views.forEach((V,i)=>{const x=i*third,ww=i===2?w-2*third:third;camera.aspect=ww/h;camera.updateProjectionMatrix();
+      renderer.setViewport(x,0,ww,h);renderer.setScissor(x,0,ww,h);renderer.render(V.scene,camera);});}
+  function loop(ts){controls.update();if(vz.gt){const f=Math.min(vz.T-1,Math.round(clock.tick(ts,vz.playing,(vz.T-1)*5)/5));if(f!==vz.frame)setF(f);}render();requestAnimationFrame(loop);}
+  requestAnimationFrame(loop);
+  const orig=draw; draw=function(tag){orig(tag); loadViz(tag);}; loadViz(cur||Object.keys(data)[0]); }
 })();
 </script>
 </body>
