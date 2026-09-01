@@ -62,7 +62,7 @@
     main.innerHTML = '<div class="subtabs" id="subtabs"></div><iframe id="viz" title=""></iframe>';
     const sub = document.getElementById('subtabs'), fr = document.getElementById('viz');
     const pick = (it, i) => { sub.querySelectorAll('button').forEach((b, j) => b.classList.toggle('active', j === i));
-                              fr.src = it.src; fr.title = it.label; };
+                              fr.src = it.src + (it.src.includes('?') ? '&' : '?') + 'v=' + Date.now(); fr.title = it.label; };
     (m.items || []).forEach((it, i) => { const b = document.createElement('button'); b.textContent = it.label;
                                         b.onclick = () => pick(it, i); sub.appendChild(b); });
     if (m.items && m.items.length) pick(m.items[0], 0);
