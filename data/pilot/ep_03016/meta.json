@@ -1,0 +1,61 @@
+{
+ "stem": "ep_03016",
+ "config": "shell2048",
+ "shape": "cube",
+ "scenario": "slam",
+ "seed": 3016,
+ "label": "hollow elastic shell cube",
+ "n_frames": 120,
+ "n_particles": 2048,
+ "dt": 0.01,
+ "dt_sim": 0.0025,
+ "stride": 4,
+ "substeps": 102,
+ "duration_s": 1.2,
+ "frames_simulated": 480,
+ "frames_saved": 480,
+ "last_moving_frame": 479,
+ "material": "elastic",
+ "E": 100000000.0,
+ "nu": 0.2,
+ "rho": 1000.0,
+ "grid_density": 64,
+ "radius": null,
+ "box_size": null,
+ "cube_size": [
+  0.2,
+  0.2,
+  0.2
+ ],
+ "spawn_pos": [
+  0.8053523903561586,
+  0.4965065673756517,
+  0.7398559871854513
+ ],
+ "spawn_euler_deg": [
+  325.75318989742516,
+  25.20647627094786,
+  215.09365139574027
+ ],
+ "v0": [
+  -0.6268254903335854,
+  0.00533506037200604,
+  -5.968794312904615
+ ],
+ "omega0": [
+  -3.083835356157512,
+  3.2641155565550153,
+  -1.7812865796425172
+ ],
+ "speed0": 6.001620131928011,
+ "spin0": 4.830887366648712,
+ "friction": 0.5,
+ "arena": {
+  "size": 1.0,
+  "wall_height": 1.2,
+  "wall_thickness": 0.06
+ },
+ "rmse_max_mm": 8.203181839834215,
+ "verdict": "SOFT",
+ "genesis_version": "1.3.3"
+}

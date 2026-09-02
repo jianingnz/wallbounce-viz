@@ -51,6 +51,10 @@
     {
      "label": "New episodes: sand sphere + shell cube",
      "src": "../episodes.html"
+    },
+    {
+     "label": "Cube pilot (20 episodes)",
+     "src": "../pilot.html"
     }
    ]
   }

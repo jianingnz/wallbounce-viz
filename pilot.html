@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Cube pilot</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  table.pilot{width:100%; border-collapse:collapse; margin:18px 0 6px; font-size:13px}
+  table.pilot th{text-align:left; font-weight:600; border-bottom:1px solid var(--ink); padding:6px 8px 5px; white-space:nowrap}
+  table.pilot td{border-bottom:1px solid var(--line); padding:5px 8px; white-space:nowrap}
+  table.pilot tr.sel td{background:#f0ece2}
+  table.pilot tbody tr{cursor:pointer}
+  table.pilot tbody tr:hover td{background:#f6f3ec}
+  td.num{text-align:right; font-variant-numeric:tabular-nums}
+  .tag{display:inline-block; padding:1px 7px; border-radius:9px; font-size:11px; letter-spacing:.02em}
+  .stage{position:relative; height:480px; border:1px solid var(--line); background:#fbfaf8; overflow:hidden; margin-top:6px}
+  .stage canvas{display:block; width:100%; height:100%}
+  .stage .lbl{left:10px; top:8px}
+  .ctl input[type=range]{accent-color:var(--ink)}
+  .hint{color:var(--mute); font-size:12px; margin:2px 0 0}
+  @media(max-width:700px){ .stage{height:340px} table.pilot{font-size:12px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cube pilot — 20 episodes</h1>
+  <p class="sub">The first 20 episodes of the proposed 9,000-episode cube extension, generated exactly as the full run would be: hollow elastic cube, E=1e8, same arena, same scenario and pose sampling, all 480 frames with no trimming. Seeds continue past the existing set, so none of these repeats an initial condition already in the dataset.</p>
+  <div id="summary"></div>
+  <table class="pilot" id="tbl"><thead><tr>
+    <th>#</th><th>scenario</th><th>drop&nbsp;height</th><th>speed</th><th>spin</th><th>max&nbsp;deform</th><th>verdict</th><th>seed</th>
+  </tr></thead><tbody></tbody></table>
+  <p class="hint">Click any row to load its 3D replay below.</p>
+  <div id="viewer"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+  const CUBE = '#3f9a94';
+  const TAG = {'RIGID-LIKE': '#dfeee6', 'SOFT': '#f6ecd2', 'CRUMPLED/DEFORMED': '#f3ded8'};
+  const disc = vizDisc();
+  const cm = v => (v * 100).toFixed(0);
+  let current = null, index = [];
+
+  function buildViewer(host, meta, buf){
+    host.innerHTML = `<h2>${meta.stem} — ${meta.scenario} throw</h2>
+      <div class="stage"><canvas></canvas><div class="lbl"><b>${meta.label}</b><br><span class="m"></span></div></div>
+      <div class="ctl"><button class="play">Pause</button><button class="replay">Replay</button><input type="range" min="0" max="1" value="0" step="1"><span class="mono frame"></span></div>
+      <p class="caption">${cm(meta.cube_size[0])} cm cube · launched at ${meta.speed0.toFixed(1)} m/s from ${cm(meta.spawn_pos[2])} cm, spin ${meta.spin0.toFixed(1)} rad/s · ${meta.substeps} substeps per frame · seed ${meta.seed}. Shown every ${meta.stride}th simulator frame. Drag to orbit, scroll to zoom.</p>`;
+
+    const N = meta.n_particles, T = meta.n_frames, DT_MS = meta.dt * 1000, H = meta.arena.wall_height;
+    const canvas = host.querySelector('canvas');
+    const scene = new THREE.Scene(); scene.background = new THREE.Color('#fbfaf8');
+    const grid = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); grid.position.set(0.5, 0, 0.5); scene.add(grid);
+    const P = (x, y, z) => new THREE.Vector3(x, y, z);
+    scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0), P(1,0,0), P(1,0,1), P(0,0,1)]), new THREE.LineBasicMaterial({color: 0x444444})));
+    const up = new THREE.LineBasicMaterial({color: 0xb0b0b0});
+    for (const [x, z] of [[0,0],[1,0],[1,1],[0,1]]) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(x,0,z), P(x,H,z)]), up));
+    scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,H,0), P(1,H,0), P(1,H,1), P(0,H,1)]), new THREE.LineBasicMaterial({color: 0xcccccc})));
+    scene.add(Object.assign(new THREE.AxesHelper(0.08), {position: new THREE.Vector3(-0.02, 0.001, -0.02)}));
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({size: 0.0135, map: disc, color: CUBE, transparent: true, alphaTest: 0.4, depthWrite: true, sizeAttenuation: true}));
+    pts.frustumCulled = false; scene.add(pts);
+
+    const renderer = new THREE.WebGLRenderer({canvas, antialias: true}); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const camera = new THREE.PerspectiveCamera(36, 1, 0.01, 100);
+    const controls = new THREE.OrbitControls(camera, canvas); controls.enableDamping = true; controls.dampingFactor = 0.08;
+    controls.minDistance = 0.2; controls.maxDistance = 6; controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    const vx = meta.v0[0], vz = meta.v0[1], sp = Math.hypot(vx, vz);
+    const bx = sp > 0.1 ? -vx / sp : (meta.spawn_pos[0] < 0.5 ? -1 : 1), bz = sp > 0.1 ? -vz / sp : (meta.spawn_pos[1] < 0.5 ? -1 : 1);
+    camera.position.set(0.5 + bx * 1.35 - bz * 0.9, 0.95, 0.5 + bz * 1.35 + bx * 0.9); controls.target.set(0.5, 0.22, 0.5);
+
+    const scrub = host.querySelector('input[type=range]'), read = host.querySelector('.frame'),
+          lbl = host.querySelector('.lbl .m'), playBtn = host.querySelector('.play');
+    const getSpeed = makeSpeed(host.querySelector('.ctl'), [[1,'Real time'],[4,'¼ speed'],[10,'1/10 speed'],[25,'1/25 speed']]);
+    const clock = makeClock(() => getSpeed(), 900);
+    let frame = -1, playing = true, alive = true; scrub.max = T - 1;
+    function setFrame(f){
+      frame = f; geo.attributes.position.array.set(buf.subarray(f * N * 3, (f + 1) * N * 3)); geo.attributes.position.needsUpdate = true;
+      scrub.value = f; read.textContent = `${f + 1} / ${T} · ${(f * DT_MS).toFixed(0)} ms`; lbl.textContent = `t = ${(f * DT_MS / 1000).toFixed(3)} s`;
+    }
+    function render(){
+      const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return; const pr = renderer.getPixelRatio();
+      if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)){ renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+      renderer.render(scene, camera);
+    }
+    function loop(ts){
+      if (!alive){ renderer.dispose(); return; }          // stop the old viewer when another row is picked
+      controls.update();
+      const f = Math.min(T - 1, Math.round(clock.tick(ts, playing, (T - 1) * DT_MS) / DT_MS));
+      if (f !== frame) setFrame(f); render(); requestAnimationFrame(loop);
+    }
+    playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? 'Pause' : 'Play'; };
+    host.querySelector('.replay').onclick = () => { clock.set(0); setFrame(0); playing = true; playBtn.textContent = 'Pause'; };
+    scrub.oninput = function(){ playing = false; playBtn.textContent = 'Play'; setFrame(+this.value); clock.set(frame * DT_MS); };
+    setFrame(0); requestAnimationFrame(loop);
+    return () => { alive = false; };
+  }
+
+  async function show(e, row){
+    document.querySelectorAll('#tbl tr.sel').forEach(r => r.classList.remove('sel'));
+    row.classList.add('sel');
+    const host = document.getElementById('viewer');
+    if (current) current();                                  // halt the previous render loop
+    host.innerHTML = '<p class="caption">Loading…</p>';
+    const v = '?t=' + Date.now();
+    const meta = await (await fetch(`data/pilot/${e.stem}/meta.json` + v)).json();
+    const buf = new Float32Array(await (await fetch(`data/pilot/${e.stem}/pos.bin` + v)).arrayBuffer());
+    current = buildViewer(host, meta, buf);
+    host.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+
+  async function init(){
+    const v = '?t=' + Date.now();
+    try { index = await (await fetch('data/pilot/index.json' + v)).json(); }
+    catch (err){ document.getElementById('summary').innerHTML = '<p class="caption">Could not load data/pilot/index.json</p>'; return; }
+    const n = index.length, byScen = {};
+    for (const e of index) byScen[e.scenario] = (byScen[e.scenario] || 0) + 1;
+    const frames = index.reduce((a, e) => a + e.frames_saved, 0) / n;
+    document.getElementById('summary').innerHTML =
+      `<p class="caption"><b>${n} episodes</b> · ${Object.entries(byScen).map(([k, c]) => `${c} ${k}`).join(' · ')} · every clip ${frames.toFixed(0)} frames (1.2 s, untrimmed) · 2,048 points each.</p>`;
+    const tb = document.querySelector('#tbl tbody');
+    index.forEach((e, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="mono">${e.stem.replace('ep_', '')}</td><td>${e.scenario}</td>`
+        + `<td class="num">${cm(e.spawn_pos[2])} cm</td><td class="num">${e.speed0.toFixed(1)} m/s</td>`
+        + `<td class="num">${e.spin0.toFixed(1)} rad/s</td><td class="num">${e.rmse_max_mm.toFixed(0)} mm</td>`
+        + `<td><span class="tag" style="background:${TAG[e.verdict] || '#eee'}">${e.verdict}</span></td>`
+        + `<td class="mono num">${e.seed}</td>`;
+      tr.onclick = () => show(e, tr);
+      tb.appendChild(tr);
+    });
+    show(index[0], tb.firstChild);
+  }
+  init();
+})();
+</script>
+</body>
+</html>

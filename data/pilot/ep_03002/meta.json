@@ -1,0 +1,61 @@
+{
+ "stem": "ep_03002",
+ "config": "shell2048",
+ "shape": "cube",
+ "scenario": "wall",
+ "seed": 3002,
+ "label": "hollow elastic shell cube",
+ "n_frames": 120,
+ "n_particles": 2048,
+ "dt": 0.01,
+ "dt_sim": 0.0025,
+ "stride": 4,
+ "substeps": 102,
+ "duration_s": 1.2,
+ "frames_simulated": 480,
+ "frames_saved": 480,
+ "last_moving_frame": 479,
+ "material": "elastic",
+ "E": 100000000.0,
+ "nu": 0.2,
+ "rho": 1000.0,
+ "grid_density": 64,
+ "radius": null,
+ "box_size": null,
+ "cube_size": [
+  0.2,
+  0.2,
+  0.2
+ ],
+ "spawn_pos": [
+  0.5763996635156897,
+  0.27085572195869984,
+  0.4992912364421642
+ ],
+ "spawn_euler_deg": [
+  252.0467696959982,
+  74.06338716773953,
+  255.96249965696748
+ ],
+ "v0": [
+  1.8790407972323215,
+  1.844345355951597,
+  0.0
+ ],
+ "omega0": [
+  8.327749512870307,
+  -2.816827388265241,
+  -3.325662209539007
+ ],
+ "speed0": 2.63294589949807,
+ "spin0": 9.399253035020852,
+ "friction": 0.5,
+ "arena": {
+  "size": 1.0,
+  "wall_height": 1.2,
+  "wall_thickness": 0.06
+ },
+ "rmse_max_mm": 3.8632708457839575,
+ "verdict": "RIGID-LIKE",
+ "genesis_version": "1.3.3"
+}

@@ -1,0 +1,362 @@
+[
+ {
+  "stem": "ep_03000",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3000,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5066228194529445,
+   0.5525257112977896,
+   0.7778174599187355
+  ],
+  "speed0": 4.663038876307067,
+  "spin0": 9.763329963755957,
+  "rmse_max_mm": 6.853061836657639,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03001",
+  "label": "hollow elastic shell cube",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3001,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.35077549142434594,
+   0.2162263829029495,
+   0.7348487045270783
+  ],
+  "speed0": 0.0,
+  "spin0": 11.170980800333068,
+  "rmse_max_mm": 4.838873143290157,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03002",
+  "label": "hollow elastic shell cube",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3002,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5763996635156897,
+   0.27085572195869984,
+   0.4992912364421642
+  ],
+  "speed0": 2.63294589949807,
+  "spin0": 9.399253035020852,
+  "rmse_max_mm": 3.8632708457839575,
+  "verdict": "RIGID-LIKE"
+ },
+ {
+  "stem": "ep_03003",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3003,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.40123725230126783,
+   0.6259891851537662,
+   0.6280194830318909
+  ],
+  "speed0": 4.25021120684392,
+  "spin0": 6.831271631666466,
+  "rmse_max_mm": 6.451024286729195,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03004",
+  "label": "hollow elastic shell cube",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3004,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.49727592380144015,
+   0.33567171070418406,
+   0.65009525894665
+  ],
+  "speed0": 0.0,
+  "spin0": 2.7669973813990922,
+  "rmse_max_mm": 4.395242467393564,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03005",
+  "label": "hollow elastic shell cube",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3005,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5993394171344332,
+   0.46632090720315267,
+   0.44995934764810647
+  ],
+  "speed0": 3.446774040496699,
+  "spin0": 4.982324201041189,
+  "rmse_max_mm": 4.726805898440119,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03006",
+  "label": "hollow elastic shell cube",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3006,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.2564615492570201,
+   0.34093457371727093,
+   0.434027596918529
+  ],
+  "speed0": 0.0,
+  "spin0": 4.463408961039514,
+  "rmse_max_mm": 3.8893362415568498,
+  "verdict": "RIGID-LIKE"
+ },
+ {
+  "stem": "ep_03007",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3007,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.6462985423219267,
+   0.2232288043308925,
+   0.7445471840097221
+  ],
+  "speed0": 3.216619115762328,
+  "spin0": 2.4017908510005745,
+  "rmse_max_mm": 6.562267068567049,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03008",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3008,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.7529181112216623,
+   0.4790156082375113,
+   0.7273346563169304
+  ],
+  "speed0": 5.654256819026932,
+  "spin0": 11.533755913836604,
+  "rmse_max_mm": 6.986900788640375,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03009",
+  "label": "hollow elastic shell cube",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3009,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5554703781617232,
+   0.2853802876541468,
+   0.3881065916099674
+  ],
+  "speed0": 0.0,
+  "spin0": 8.264958628907817,
+  "rmse_max_mm": 3.0925456565453366,
+  "verdict": "RIGID-LIKE"
+ },
+ {
+  "stem": "ep_03010",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3010,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.7062618510872438,
+   0.25464128810555214,
+   0.7852545637112968
+  ],
+  "speed0": 6.0026079533147385,
+  "spin0": 11.374521093287632,
+  "rmse_max_mm": 7.270912566755005,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03011",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3011,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.3187873410120149,
+   0.6252129251194567,
+   0.7557969273269554
+  ],
+  "speed0": 3.26410577435489,
+  "spin0": 7.426325470225154,
+  "rmse_max_mm": 5.949719346170541,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03012",
+  "label": "hollow elastic shell cube",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3012,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.6615102209066733,
+   0.7741497190663403,
+   0.6350513942299274
+  ],
+  "speed0": 2.2653518068121663,
+  "spin0": 6.50242944256007,
+  "rmse_max_mm": 4.021610165514538,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03013",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3013,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5015353930347229,
+   0.32009016815323055,
+   0.6884217904517919
+  ],
+  "speed0": 5.431047733839858,
+  "spin0": 8.363175780144344,
+  "rmse_max_mm": 5.2154143571011815,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03014",
+  "label": "hollow elastic shell cube",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3014,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.6218844901697609,
+   0.43313719675075263,
+   0.6435302542036385
+  ],
+  "speed0": 0.0,
+  "spin0": 8.45263703265225,
+  "rmse_max_mm": 4.200008284395033,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03015",
+  "label": "hollow elastic shell cube",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3015,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.6681567256009254,
+   0.5528280692876768,
+   0.45946618129181255
+  ],
+  "speed0": 2.9456321716641645,
+  "spin0": 3.745677586518136,
+  "rmse_max_mm": 4.033871078627021,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03016",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3016,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.8053523903561586,
+   0.4965065673756517,
+   0.7398559871854513
+  ],
+  "speed0": 6.001620131928011,
+  "spin0": 4.830887366648712,
+  "rmse_max_mm": 8.203181839834215,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03017",
+  "label": "hollow elastic shell cube",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3017,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.41789559647874097,
+   0.6569648240238415,
+   0.6834388588508739
+  ],
+  "speed0": 0.0,
+  "spin0": 9.517918428338785,
+  "rmse_max_mm": 4.601409001005844,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03018",
+  "label": "hollow elastic shell cube",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3018,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.505674399942221,
+   0.26471725284302483,
+   0.5177288272194279
+  ],
+  "speed0": 1.9969320822388326,
+  "spin0": 4.639116006699291,
+  "rmse_max_mm": 4.507350861318571,
+  "verdict": "SOFT"
+ },
+ {
+  "stem": "ep_03019",
+  "label": "hollow elastic shell cube",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 3019,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.4986860869016385,
+   0.5599207148670791,
+   0.6352161323356585
+  ],
+  "speed0": 4.1888260886626005,
+  "spin0": 6.400668354523295,
+  "rmse_max_mm": 6.529520469738365,
+  "verdict": "SOFT"
+ }
+]
