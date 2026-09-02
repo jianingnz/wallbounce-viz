@@ -58,7 +58,6 @@
 
     const scrub = sec.querySelector('input[type=range]'), read = sec.querySelector('.frame'), lbl = sec.querySelector('.lbl .m'), playBtn = sec.querySelector('.play');
     const getSpeed = makeSpeed(sec.querySelector('.ctl'), [[1,'Real time'],[4,'¼ speed'],[10,'1/10 speed'],[25,'1/25 speed']]);
-    sec.querySelector('#speed').value = 4;
     const clock = makeClock(() => getSpeed(), 900);
     let frame = -1, playing = true; scrub.max = T - 1;
     function setFrame(f){
