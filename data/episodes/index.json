@@ -1,0 +1,16 @@
+[
+ {
+  "stem": "sand2048_sphere_wall_000",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "n_frames": 112,
+  "n_particles": 2048
+ },
+ {
+  "stem": "shell2048_cube_wall_000",
+  "label": "hollow elastic shell cube",
+  "scenario": "wall",
+  "n_frames": 240,
+  "n_particles": 2048
+ }
+]

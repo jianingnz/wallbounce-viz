@@ -4,54 +4,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<title>Meetings</title>
+<title>Meetings — Particle world model</title>
 <link rel="stylesheet" href="../site.css">
 <style>
-  :root{--accent:var(--blue)}
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--ink);
-       font-size:15px}
-  .layout{display:grid; grid-template-columns:220px 1fr; min-height:100vh}
-  nav{border-right:1px solid var(--line); padding:28px 18px; position:sticky; top:0; height:100vh; overflow:auto}
-  nav h1{font-size:15px; font-weight:600; margin:0 0 4px; letter-spacing:.01em}
-  nav .who{font-size:12.5px; color:var(--soft); margin-bottom:18px}
-  nav .lbl{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--soft); margin:14px 0 6px}
-  nav a{display:block; padding:6px 8px; border-radius:4px; color:var(--ink); text-decoration:none; font-size:14px}
-  nav a small{display:block; color:var(--soft); font-size:12px}
-  nav a.active{background:var(--card); color:var(--blue); font-weight:600}
-  main{padding:28px 32px 60px}
-  .subtabs{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px}
-  .subtabs button{font:inherit; font-size:13.5px; padding:6px 14px; border:1px solid var(--line); background:#fff; border-radius:980px; cursor:pointer}
-  .subtabs button.active{background:var(--blue); color:#fff; border-color:var(--blue)}
-  main iframe{width:100%; height:calc(100vh - 100px); border:1px solid var(--line); border-radius:12px; background:#fff}
-  main h1{font-size:28px; font-weight:600; margin:0 0 2px; letter-spacing:-.01em}
-  main .date{color:var(--soft); font-size:14px; margin-bottom:28px}
-  main h2{font-size:20px; font-weight:600; margin:34px 0 10px; padding-bottom:4px; border-bottom:1px solid var(--line)}
-  main h3{font-size:16.5px; font-weight:600; margin:22px 0 6px}
-  main p, main li{font-size:16px}
-  main p{margin:8px 0 12px}
-  main ul, main ol{padding-left:22px}
-  main li{margin:4px 0}
-  main code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; background:#f4f4f4; padding:1px 5px; border-radius:3px}
-  main pre{background:#f7f7f7; border:1px solid var(--line); border-radius:4px; padding:12px 14px;
-           font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13.5px; line-height:1.5; overflow-x:auto}
-  main table{border-collapse:collapse; margin:10px 0 14px; font-size:15px}
-  main th, main td{padding:6px 12px; border-bottom:1px solid var(--line); text-align:left; font-variant-numeric:tabular-nums}
-  main th{font-weight:600; color:var(--soft); font-size:13.5px}
-  main .note{border-left:3px solid var(--accent); background:#f7f9fd; padding:10px 14px; margin:14px 0; font-size:15px}
-  main .eq{margin:12px 0 12px 24px; font-family:"Cambria Math","STIX Two Math",Georgia,serif; font-size:17px}
-  main .toc{font-size:14px; color:var(--soft); margin:0 0 22px}
-  main .toc a{color:var(--accent); text-decoration:none; margin-right:14px}
-  @media(max-width:760px){ .layout{grid-template-columns:1fr} nav{position:static; height:auto; border-right:0; border-bottom:1px solid var(--line)} main{padding:24px 20px} }
+  body{background:#fff; color:var(--ink); font-size:15px}
+  .mast{border-bottom:1px solid var(--ink); padding:18px 28px 0}
+  .mast .top{display:flex; align-items:baseline; justify-content:space-between; gap:20px; flex-wrap:wrap}
+  .mast h1{font-family:var(--serif); font-size:26px; font-weight:700; letter-spacing:-.01em; margin:0}
+  .mast h1 small{font-family:var(--sans); font-size:11.5px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); margin-left:14px}
+  .mast .who{font-size:12.5px; color:var(--soft)}
+  nav{display:flex; gap:2px; flex-wrap:wrap; margin-top:10px}
+  nav .navlbl{font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--soft); align-self:center; margin-right:12px; padding-bottom:9px}
+  nav a{display:block; padding:6px 12px 9px; color:#444; text-decoration:none; font-size:14px; font-variant-numeric:tabular-nums; border-bottom:3px solid transparent; margin-bottom:-1px}
+  nav a:hover{color:var(--ink)}
+  nav a.active{color:var(--ink); font-weight:600; border-bottom-color:var(--ink)}
+  main{padding:14px 28px 40px}
+  .subtabs{display:flex; gap:22px; flex-wrap:wrap; margin:0 0 12px; border-bottom:1px solid var(--line)}
+  .subtabs button{font:inherit; font-size:13.5px; font-weight:500; padding:8px 0 10px; border:0; border-bottom:2px solid transparent; margin-bottom:-1px; background:none; color:#555; cursor:pointer; letter-spacing:.01em}
+  .subtabs button:hover{color:var(--ink)}
+  .subtabs button.active{color:var(--ink); font-weight:600; border-bottom-color:var(--ink)}
+  main iframe{width:100%; height:calc(100vh - 150px); border:1px solid var(--line); background:#fff}
+  @media(max-width:760px){ .mast,main{padding-left:16px; padding-right:16px} main iframe{height:calc(100vh - 190px)} }
 </style>
 </head>
 <body>
-<div class="layout">
-  <nav>
-    <div id="tabs"></div>
-  </nav>
-  <main id="main">loading…</main>
-</div>
+<header class="mast">
+  <div class="top">
+    <h1>Particle world model <small>Meeting notes</small></h1>
+    <span class="who">Δt-aware particle dynamics · Genesis MPM &amp; MOVi wall-bounce data</span>
+  </div>
+  <nav><span class="navlbl">Meetings</span><span id="tabs" style="display:contents"></span></nav>
+</header>
+<main id="main">loading…</main>
 <script>
 (async function(){
   const idx = await (await fetch('meetings.json?t=' + Date.now())).json();
