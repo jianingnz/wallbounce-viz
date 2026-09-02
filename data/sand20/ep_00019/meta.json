@@ -1,0 +1,61 @@
+{
+ "stem": "ep_00019",
+ "config": "sand2048",
+ "shape": "sphere",
+ "scenario": "slam",
+ "seed": 100019,
+ "label": "sand sphere",
+ "n_frames": 120,
+ "n_particles": 2048,
+ "dt": 0.01,
+ "dt_sim": 0.0025,
+ "stride": 4,
+ "substeps": 8,
+ "duration_s": 1.2,
+ "frames_simulated": 480,
+ "frames_saved": 480,
+ "last_moving_frame": 479,
+ "material": "sand",
+ "E": null,
+ "nu": null,
+ "rho": null,
+ "grid_density": 64,
+ "radius": 0.0787,
+ "box_size": null,
+ "cube_size": [
+  0.2,
+  0.2,
+  0.2
+ ],
+ "spawn_pos": [
+  0.20402332217034383,
+  0.22851413168752013,
+  0.7863856075745959
+ ],
+ "spawn_euler_deg": [
+  233.36012207064036,
+  224.03308117045682,
+  329.54674879374045
+ ],
+ "v0": [
+  -0.5435358114295974,
+  0.706644749291452,
+  -3.7245213086943316
+ ],
+ "omega0": [
+  -0.25837285028102763,
+  0.7783536227421326,
+  0.3823337003613149
+ ],
+ "speed0": 3.8297306640187827,
+ "spin0": 0.90485907755303,
+ "friction": 0.5,
+ "arena": {
+  "size": 1.0,
+  "wall_height": 1.2,
+  "wall_thickness": 0.06
+ },
+ "rmse_max_mm": 154.8212207906865,
+ "verdict": "CRUMPLED/DEFORMED",
+ "genesis_version": "1.3.3"
+}

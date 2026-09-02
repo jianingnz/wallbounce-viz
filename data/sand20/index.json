@@ -1,0 +1,382 @@
+[
+ {
+  "stem": "ep_00000",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100000,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.3696495053640264,
+   0.505061006090095,
+   0.5492164087577577
+  ],
+  "speed0": 0.0,
+  "spin0": 10.940718868300436,
+  "rmse_max_mm": 121.9192849636371,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00001",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100001,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5680827147508005,
+   0.7954851814112438,
+   0.48908051945780384
+  ],
+  "speed0": 1.8079658233937275,
+  "spin0": 11.903220708407764,
+  "rmse_max_mm": 111.10986362806003,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00002",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100002,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5368134679585589,
+   0.2125191485862325,
+   0.43287686326739083
+  ],
+  "speed0": 3.105655528525692,
+  "spin0": 7.850371304429378,
+  "rmse_max_mm": 71.56860666299669,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00003",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100003,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.6744721149308845,
+   0.27582692852399415,
+   0.40538298311249343
+  ],
+  "speed0": 3.070319274291362,
+  "spin0": 0.08216885863130452,
+  "rmse_max_mm": 95.88888941402016,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00004",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100004,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.3848089001131352,
+   0.6690890264199235,
+   0.6832346605446529
+  ],
+  "speed0": 5.80836327136304,
+  "spin0": 3.1681316875963703,
+  "rmse_max_mm": 262.1751905012054,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00005",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100005,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.3804162715350906,
+   0.6836687359325295,
+   0.6305339622799375
+  ],
+  "speed0": 4.6415394966914825,
+  "spin0": 2.664528598735552,
+  "rmse_max_mm": 219.7996681136629,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00006",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100006,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.655534268177941,
+   0.6633236535919652,
+   0.6652407726375346
+  ],
+  "speed0": 0.0,
+  "spin0": 9.204209297673556,
+  "rmse_max_mm": 91.84126609435197,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00007",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100007,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.7296006350600425,
+   0.3557892347129465,
+   0.7372014631799206
+  ],
+  "speed0": 0.0,
+  "spin0": 2.08194703911442,
+  "rmse_max_mm": 80.25690113314589,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00008",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100008,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.422380485516825,
+   0.2712573875058713,
+   0.805954826074332
+  ],
+  "speed0": 5.694102433010277,
+  "spin0": 4.863597054209848,
+  "rmse_max_mm": 254.569023806152,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00009",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100009,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.7075519531524768,
+   0.4662663544852711,
+   0.6342734945308107
+  ],
+  "speed0": 3.0661271938487076,
+  "spin0": 11.940963492057177,
+  "rmse_max_mm": 142.477781466173,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00010",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100010,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.2891305812463004,
+   0.4888657293973665,
+   0.8035283480727622
+  ],
+  "speed0": 4.559500826472315,
+  "spin0": 10.215336535129838,
+  "rmse_max_mm": 117.563989621685,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00011",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100011,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.278480955830154,
+   0.707832650245664,
+   0.7181381608568168
+  ],
+  "speed0": 0.0,
+  "spin0": 6.471016319465243,
+  "rmse_max_mm": 63.604641684715595,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00012",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100012,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.38332306255043685,
+   0.4165266823794019,
+   0.4747376124679506
+  ],
+  "speed0": 1.6502867062511495,
+  "spin0": 6.402592878412143,
+  "rmse_max_mm": 38.62086928578065,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00013",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100013,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.27661045978025534,
+   0.7697076421471621,
+   0.35679109963652395
+  ],
+  "speed0": 0.0,
+  "spin0": 4.266706342172287,
+  "rmse_max_mm": 48.07394591295981,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00014",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100014,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5290531272383977,
+   0.4616319542992663,
+   0.552997566501624
+  ],
+  "speed0": 0.0,
+  "spin0": 4.040903762096216,
+  "rmse_max_mm": 51.32889833922524,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00015",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100015,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5307053433833182,
+   0.5787348638303961,
+   0.5659047994672591
+  ],
+  "speed0": 0.0,
+  "spin0": 7.198208847462996,
+  "rmse_max_mm": 60.19555411443185,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00016",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100016,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.6714702482259792,
+   0.32587994730556075,
+   0.3633108824940583
+  ],
+  "speed0": 0.0,
+  "spin0": 7.851374159873992,
+  "rmse_max_mm": 63.437840518911464,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00017",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100017,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.7926789385459994,
+   0.4410455107183854,
+   0.45723661162310053
+  ],
+  "speed0": 1.7434166588935625,
+  "spin0": 6.647570707296046,
+  "rmse_max_mm": 85.13474046749678,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00018",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100018,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.5062749333964731,
+   0.22118364396614532,
+   0.7212264873888564
+  ],
+  "speed0": 3.6331983988853414,
+  "spin0": 9.210198885419892,
+  "rmse_max_mm": 97.36971341702697,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ },
+ {
+  "stem": "ep_00019",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "n_frames": 120,
+  "n_particles": 2048,
+  "seed": 100019,
+  "frames_saved": 480,
+  "spawn_pos": [
+   0.20402332217034383,
+   0.22851413168752013,
+   0.7863856075745959
+  ],
+  "speed0": 3.8297306640187827,
+  "spin0": 0.90485907755303,
+  "rmse_max_mm": 154.8212207906865,
+  "verdict": "CRUMPLED/DEFORMED",
+  "backend": "gpu"
+ }
+]

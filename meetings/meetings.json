@@ -55,6 +55,10 @@
     {
      "label": "Cube pilot (20 episodes)",
      "src": "../pilot.html"
+    },
+    {
+     "label": "Sand samples (20 episodes)",
+     "src": "../sand20.html"
     }
    ]
   }
