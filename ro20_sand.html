@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Random outcome sand</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  table.pilot{width:100%; border-collapse:collapse; margin:18px 0 6px; font-size:13px}
+  table.pilot th{text-align:left; font-weight:600; border-bottom:1px solid var(--ink); padding:6px 8px 5px; white-space:nowrap}
+  table.pilot td{border-bottom:1px solid var(--line); padding:5px 8px; white-space:nowrap}
+  table.pilot tr.sel td{background:#f0ece2}
+  table.pilot tbody tr.has{cursor:pointer}
+  table.pilot tbody tr.has:hover td{background:#f6f3ec}
+  table.pilot tbody tr.no td{color:var(--mute)}
+  td.num{text-align:right; font-variant-numeric:tabular-nums}
+  .stage{position:relative; height:500px; border:1px solid var(--line); background:#fbfaf8; overflow:hidden; margin-top:6px}
+  .stage canvas{display:block; width:100%; height:100%}
+  .stage .lbl{left:10px; top:8px}
+  .ctl input[type=range]{accent-color:var(--ink)}
+  .hint{color:var(--mute); font-size:12px; margin:2px 0 0}
+  .sw{display:inline-block; width:10px; height:10px; border-radius:50%; margin:0 4px 0 10px; vertical-align:-1px}
+  @media(max-width:700px){ .stage{height:360px} table.pilot{font-size:12px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="ttl">Random outcome — sand pilot</h1>
+  <p class="sub" id="sub">Each group is one anchor initial condition plus 9 copies with tiny changes to position (±3 mm), orientation (±2°), launch velocity (±2 %) and spin (±3 %). The starting frames are meant to be indistinguishable; the endings are not.</p>
+  <div id="summary"></div>
+  <table class="pilot" id="tbl"><thead><tr>
+    <th>anchor</th><th>scenario</th><th>start&nbsp;dev, frames&nbsp;0–4</th><th>diverges&nbsp;>1&nbsp;cm&nbsp;at</th><th>final&nbsp;COM&nbsp;spread</th><th>final&nbsp;RMSE&nbsp;vs&nbsp;anchor</th><th>3D</th>
+  </tr></thead><tbody></tbody></table>
+  <p class="hint">Click a row with 3D to overlay its 10 episodes (512 of the 2,048 points shown). Anchor in dark, the 9 perturbed copies in lighter tints.</p>
+  <div id="viewer"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+  const DATA = new URLSearchParams(location.search).get('d') || 'ro20_sand';
+  const BASE = {shell2048: '#3f9a94', sand2048: '#d3a15a'};
+  const disc = vizDisc();
+  let current = null;
+
+  function tints(base, n){   // anchor: dark version; k>0: rotate lightness/hue gently so copies are distinguishable
+    const c = new THREE.Color(base), hsl = {}; c.getHSL(hsl);
+    const out = [new THREE.Color().setHSL(hsl.h, hsl.s * 0.6, 0.22)];
+    for (let i = 1; i < n; i++) out.push(new THREE.Color().setHSL((hsl.h + (i - 5) * 0.035 + 1) % 1, Math.min(1, hsl.s * 1.1), 0.5 + 0.18 * Math.sin(i * 1.7)));
+    return out;
+  }
+
+  function buildViewer(host, meta, buf){
+    const K = meta.K, T = meta.n_frames, N = meta.npts, DT_MS = meta.dt * 1000, H = meta.arena.wall_height;
+    const cols = tints(BASE[meta.config] || '#888', K);
+    host.innerHTML = `<h2>${meta.anchor} — ${meta.scenario} throw, ${K} episodes overlaid</h2>
+      <div class="stage"><canvas></canvas><div class="lbl"><b>${meta.label}</b><br><span class="m"></span></div></div>
+      <div class="ctl"><button class="play">Pause</button><button class="replay">Replay</button><input type="range" min="0" max="1" value="0" step="1"><span class="mono frame"></span></div>
+      <p class="caption">${cols.map((c, i) => `<span class="sw" style="background:#${c.getHexString()}"></span>${i ? 'k' + i : 'anchor'}`).join('')}</p>
+      <p class="caption">Start deviation ${meta.metrics.early_mm.toFixed(1)} mm · diverges past 1 cm at frame ${meta.metrics.div_frame} (${(meta.metrics.div_frame * 2.5).toFixed(0)} ms) · final COM spread ${meta.metrics.final_com_cm.toFixed(1)} cm · final RMSE ${meta.metrics.final_rmse_mm.toFixed(0)} mm. Every ${meta.stride}th simulator frame. Drag to orbit, scroll to zoom.</p>`;
+    const canvas = host.querySelector('canvas');
+    const scene = new THREE.Scene(); scene.background = new THREE.Color('#fbfaf8');
+    const grid = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); grid.position.set(0.5, 0, 0.5); scene.add(grid);
+    const P = (x, y, z) => new THREE.Vector3(x, y, z);
+    scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0), P(1,0,0), P(1,0,1), P(0,0,1)]), new THREE.LineBasicMaterial({color: 0x444444})));
+    const up = new THREE.LineBasicMaterial({color: 0xb0b0b0});
+    for (const [x, z] of [[0,0],[1,0],[1,1],[0,1]]) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(x,0,z), P(x,H,z)]), up));
+    scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,H,0), P(1,H,0), P(1,H,1), P(0,H,1)]), new THREE.LineBasicMaterial({color: 0xcccccc})));
+    const axes = new THREE.AxesHelper(0.08); axes.position.set(-0.02, 0.001, -0.02); scene.add(axes);
+    const geos = [], frameStride = N * 3, epStride = T * N * 3;
+    for (let k = 0; k < K; k++){
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({size: k ? 0.011 : 0.014, map: disc, color: cols[k], transparent: true, alphaTest: 0.4, depthWrite: true, sizeAttenuation: true}));
+      pts.frustumCulled = false; pts.renderOrder = k ? 0 : 1; scene.add(pts); geos.push(geo);
+    }
+    const renderer = new THREE.WebGLRenderer({canvas, antialias: true}); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const camera = new THREE.PerspectiveCamera(36, 1, 0.01, 100);
+    const controls = new THREE.OrbitControls(camera, canvas); controls.enableDamping = true; controls.dampingFactor = 0.08;
+    controls.minDistance = 0.2; controls.maxDistance = 6; controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    const e0 = meta.episodes[0], vx = e0.v0[0], vz = e0.v0[1], sp = Math.hypot(vx, vz);
+    const bx = sp > 0.1 ? -vx / sp : (e0.spawn_pos[0] < 0.5 ? -1 : 1), bz = sp > 0.1 ? -vz / sp : (e0.spawn_pos[1] < 0.5 ? -1 : 1);
+    camera.position.set(0.5 + bx * 1.35 - bz * 0.9, 0.95, 0.5 + bz * 1.35 + bx * 0.9); controls.target.set(0.5, 0.22, 0.5);
+    const scrub = host.querySelector('input[type=range]'), read = host.querySelector('.frame'), lbl = host.querySelector('.lbl .m'), playBtn = host.querySelector('.play');
+    const getSpeed = makeSpeed(host.querySelector('.ctl'), [[1,'Real time'],[4,'¼ speed'],[10,'1/10 speed'],[25,'1/25 speed']]);
+    host.querySelector('#speed').value = 4;
+    const clock = makeClock(() => getSpeed(), 900);
+    let frame = -1, playing = true, alive = true; scrub.max = T - 1;
+    function setFrame(f){
+      frame = f;
+      for (let k = 0; k < K; k++){ geos[k].attributes.position.array.set(buf.subarray(k * epStride + f * frameStride, k * epStride + (f + 1) * frameStride)); geos[k].attributes.position.needsUpdate = true; }
+      scrub.value = f; read.textContent = `${f + 1} / ${T} · ${(f * DT_MS).toFixed(0)} ms`; lbl.textContent = `t = ${(f * DT_MS / 1000).toFixed(3)} s`;
+    }
+    function render(){
+      const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return; const pr = renderer.getPixelRatio();
+      if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)){ renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+      renderer.render(scene, camera);
+    }
+    function loop(ts){ if (!alive){ renderer.dispose(); return; } controls.update();
+      const f = Math.min(T - 1, Math.round(clock.tick(ts, playing, (T - 1) * DT_MS) / DT_MS)); if (f !== frame) setFrame(f); render(); requestAnimationFrame(loop); }
+    playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? 'Pause' : 'Play'; };
+    host.querySelector('.replay').onclick = () => { clock.set(0); setFrame(0); playing = true; playBtn.textContent = 'Pause'; };
+    scrub.oninput = function(){ playing = false; playBtn.textContent = 'Play'; setFrame(+this.value); clock.set(frame * DT_MS); };
+    setFrame(0); requestAnimationFrame(loop);
+    return () => { alive = false; };
+  }
+
+  async function show(e, row){
+    document.querySelectorAll('#tbl tr.sel').forEach(r => r.classList.remove('sel'));
+    row.classList.add('sel');
+    const host = document.getElementById('viewer');
+    if (current) current();
+    host.innerHTML = '<p class="caption">Loading…</p>';
+    const v = '?t=' + Date.now();
+    const meta = await (await fetch(`data/${DATA}/${e.anchor}/meta.json` + v)).json();
+    const buf = new Float32Array(await (await fetch(`data/${DATA}/${e.anchor}/pos.bin` + v)).arrayBuffer());
+    current = buildViewer(host, meta, buf);
+    host.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+
+  async function init(){
+    const v = '?t=' + Date.now();
+    let index;
+    try { index = await (await fetch(`data/${DATA}/index.json` + v)).json(); }
+    catch (err){ document.getElementById('summary').innerHTML = `<p class="caption">Could not load data/${DATA}/index.json</p>`; return; }
+    const n = index.length, med = a => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+    document.getElementById('summary').innerHTML = `<p class="caption"><b>${n} groups</b> × ${index[0].K} episodes · median start deviation ${med(index.map(g => g.early_mm)).toFixed(1)} mm · median final COM spread ${med(index.map(g => g.final_com_cm)).toFixed(1)} cm · groups with final spread > 5 cm: ${index.filter(g => g.final_com_cm > 5).length}/${n}.</p>`;
+    const tb = document.querySelector('#tbl tbody');
+    index.forEach(g => {
+      const tr = document.createElement('tr'); tr.className = g.exported ? 'has' : 'no';
+      tr.innerHTML = `<td class="mono">${g.anchor}</td><td>${g.scenario}</td><td class="num">${g.early_mm.toFixed(1)} mm</td>`
+        + `<td class="num">${g.div_frame < 0 ? 'never' : (g.div_frame * 2.5).toFixed(0) + ' ms'}</td><td class="num">${g.final_com_cm.toFixed(1)} cm</td>`
+        + `<td class="num">${g.final_rmse_mm.toFixed(0)} mm</td><td>${g.exported ? '▶' : ''}</td>`;
+      if (g.exported) tr.onclick = () => show(g, tr);
+      tb.appendChild(tr);
+    });
+    const first = index.find(g => g.exported); if (first) show(first, tb.children[index.indexOf(first)]);
+  }
+  init();
+})();
+</script>
+</body>
+</html>

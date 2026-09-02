@@ -59,6 +59,14 @@
     {
      "label": "Sand samples (20 episodes)",
      "src": "../sand20.html"
+    },
+    {
+     "label": "Random outcome: cube pilot",
+     "src": "../ro20_cube.html"
+    },
+    {
+     "label": "Random outcome: sand pilot",
+     "src": "../ro20_sand.html"
     }
    ]
   }
