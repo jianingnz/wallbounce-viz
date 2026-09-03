@@ -71,6 +71,10 @@
     {
      "label": "FPS subsampling pilot (10 cube, 10 sand)",
      "src": "../fps.html"
+    },
+    {
+     "label": "\u0394t design: collision timing",
+     "src": "../dtplan.html"
     }
    ]
   }

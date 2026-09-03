@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Δt design: collision timing</title>
+<link rel="stylesheet" href="site.css?v=20260903">
+<style>svg{display:block;width:100%} .leg span{width:18px}</style>
+</head>
+<body>
+<div class="wrap">
+  <h2 style="margin-top:4px">When things collide — and the Δt ladder</h2>
+  <p class="sub" id="sub"></p>
+  <svg id="c1" style="height:340px"></svg><div class="leg" id="l1"></div>
+  <p class="caption">Time from release to the first particle touching the floor or a wall, per episode (10,000 train episodes of <span class="mono">fully_random_sand_fps1024</span>, 10 ms bins). Vertical ticks: the training Δt ladder; the heavy tick is Δt<sub>max</sub> = 150 ms, chosen ≤ the mean pre-collision time — one maximal step spans a typical flight-to-impact.</p>
+  <h2>Data coverage per ladder rung (2 GT + 2 future frames)</h2>
+  <svg id="c2" style="height:230px"></svg>
+  <p class="caption">Share of episodes whose settle-trimmed motion span fits a full N=2 window at each step size. Every rung except the largest covers all episodes; at 150 ms the 31% shortest episodes train only on the smaller rungs.</p>
+  <h2>Effective episode length (motion only)</h2>
+  <svg id="c3" style="height:230px"></svg>
+  <p class="caption">Settle-trimmed episode lengths (25 ms bins). Raw files are all 1.2 s; on average only the first 0.52 s contains motion — window placement and the ladder statistics use this effective span, the files themselves are untouched.</p>
+</div>
+<script>
+(async()=>{
+const D=await (await fetch('data/dtplan.json?t='+Date.now())).json();
+document.getElementById('sub').textContent=`Mean time to first collision ${D.stats.mean_contact.toFixed(0)} ms (median ${D.stats.med_contact.toFixed(0)}); drop episodes hit latest, slams first. Design: uniform Δt per window, ladder 2.5–150 ms, context and future share the step.`;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function frame(svg,H,L,R,Tp,B){const W=Math.max(svg.clientWidth,420);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);return W;}
+// c1: contact histograms
+(function(){const svg=document.getElementById('c1'),H=340,L=54,R=16,Tp=12,Bm=30,W=frame(svg,H);
+ const bins=D.contact_bins, xmax=400, series=[['all',css('--ink'),2.4],['drop',css('--s1'),1.6],['wall',css('--s3'),1.6],['slam',css('--s2'),1.6]];
+ const ymax=Math.max(...D.contact_all)*1.08;
+ const X=t=>L+(W-L-R)*t/xmax, Y=v=>Tp+(H-Tp-Bm)*(1-v/ymax); let g='';
+ for(const f of [0,.25,.5,.75,1])g+=`<line x1="${L}" y1="${Y(f*ymax)}" x2="${W-R}" y2="${Y(f*ymax)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(f*ymax)+4}" text-anchor="end" font-size="11" fill="#666">${Math.round(f*ymax)}</text>`;
+ for(const t of [0,100,200,300,400])g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${t} ms</text>`;
+ for(const d of D.ladder){const big=d===150;g+=`<line x1="${X(d)}" y1="${Tp}" x2="${X(d)}" y2="${H-Bm}" stroke="${big?css('--red'):'#c9c4b8'}" stroke-width="${big?2.5:1}"${big?'':' stroke-dasharray="3 4"'}/>`;}
+ g+=`<text x="${X(150)+5}" y="${Tp+14}" font-size="12" fill="${css('--red')}" font-weight="600">Δt max 150 ms</text>`;
+ g+=`<line x1="${X(D.stats.mean_contact)}" y1="${Tp}" x2="${X(D.stats.mean_contact)}" y2="${H-Bm}" stroke="${css('--ink')}" stroke-width="1.2"/><text x="${X(D.stats.mean_contact)+5}" y="${Tp+32}" font-size="11" fill="${css('--ink')}">mean collision ${D.stats.mean_contact.toFixed(0)} ms</text>`;
+ for(const [k,color,w] of series){const h=D['contact_'+k];
+   g+=`<path d="${h.map((v,i)=>(i?'L':'M')+X((bins[i]+bins[i+1])/2).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${color}" stroke-width="${w}"/>`;}
+ svg.innerHTML=g;
+ document.getElementById('l1').innerHTML=series.map(([k,c])=>`<span style="background:${c}"></span>${k==='all'?'all episodes':k}`).join('');})();
+// c2: coverage bars
+(function(){const svg=document.getElementById('c2'),H=230,L=54,R=16,Tp=10,Bm=30,W=frame(svg,H);
+ const n=D.ladder.length,bw=(W-L-R)/n*0.62; let g='';
+ for(const f of [0,50,100])g+=`<line x1="${L}" y1="${Tp+(H-Tp-Bm)*(1-f/108)}" x2="${W-R}" y2="${Tp+(H-Tp-Bm)*(1-f/108)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Tp+(H-Tp-Bm)*(1-f/108)+4}" text-anchor="end" font-size="11" fill="#666">${f}%</text>`;
+ D.ladder.forEach((d,i)=>{const x=L+(W-L-R)*(i+0.5)/n, v=D.coverage[i], y=Tp+(H-Tp-Bm)*(1-v/108);
+   g+=`<rect x="${x-bw/2}" y="${y}" width="${bw}" height="${Tp+(H-Tp-Bm)-y}" fill="${d===150?css('--s2'):css('--s1')}"/>`;
+   g+=`<text x="${x}" y="${y-5}" text-anchor="middle" font-size="11" fill="#333">${v.toFixed(0)}%</text>`;
+   g+=`<text x="${x}" y="${H-10}" text-anchor="middle" font-size="11" fill="#666">${d}</text>`;});
+ g+=`<text x="${W-R}" y="${H-10}" text-anchor="end" font-size="10" fill="#999">ms</text>`; svg.innerHTML=g;})();
+// c3: effective length histogram
+(function(){const svg=document.getElementById('c3'),H=230,L=54,R=16,Tp=10,Bm=30,W=frame(svg,H);
+ const b=D.teff_bins,h=D.teff,xmax=800,ymax=Math.max(...h)*1.1;
+ const X=t=>L+(W-L-R)*Math.min(t,xmax)/xmax, Y=v=>Tp+(H-Tp-Bm)*(1-v/ymax); let g='';
+ for(const t of [0,200,400,600,800])g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${t} ms</text>`;
+ g+=`<line x1="${L}" y1="${Y(0)}" x2="${W-R}" y2="${Y(0)}" stroke="${css('--ink')}"/>`;
+ h.forEach((v,i)=>{if(b[i]>=xmax||!v)return;const x0=X(b[i]),x1=X(Math.min(b[i+1],xmax));
+   g+=`<rect x="${x0}" y="${Y(v)}" width="${x1-x0-1}" height="${Y(0)-Y(v)}" fill="${css('--s1')}" opacity="0.85"/>`;});
+ g+=`<line x1="${X(D.stats.mean_teff)}" y1="${Tp}" x2="${X(D.stats.mean_teff)}" y2="${Y(0)}" stroke="${css('--ink')}" stroke-width="1.2"/><text x="${X(D.stats.mean_teff)+5}" y="${Tp+12}" font-size="11" fill="${css('--ink')}">mean ${D.stats.mean_teff.toFixed(0)} ms</text>`;
+ svg.innerHTML=g;})();
+})();
+</script>
+</body>
+</html>
