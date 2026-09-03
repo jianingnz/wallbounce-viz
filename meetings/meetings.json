@@ -67,6 +67,10 @@
     {
      "label": "Random outcome: sand pilot",
      "src": "../ro20_sand.html"
+    },
+    {
+     "label": "FPS subsampling pilot (10 cube, 10 sand)",
+     "src": "../fps.html"
     }
    ]
   }

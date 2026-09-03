@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>FPS subsampling pilot</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  table.pilot{width:100%; border-collapse:collapse; margin:18px 0 6px; font-size:13px}
+  table.pilot th{text-align:left; font-weight:600; border-bottom:1px solid var(--ink); padding:6px 8px 5px; white-space:nowrap}
+  table.pilot td{border-bottom:1px solid var(--line); padding:5px 8px; white-space:nowrap}
+  table.pilot tr.sel td{background:#f0ece2}
+  table.pilot tbody tr{cursor:pointer}
+  table.pilot tbody tr:hover td{background:#f6f3ec}
+  td.num{text-align:right; font-variant-numeric:tabular-nums}
+  .stage{position:relative; height:500px; border:1px solid var(--line); background:#fbfaf8; overflow:hidden; margin-top:6px}
+  .stage canvas{display:block; width:100%; height:100%}
+  .stage .lbl{left:10px; top:8px}
+  .ctl input[type=range]{accent-color:var(--ink)}
+  .ctl .seg{display:inline-flex; border:1px solid var(--ink); border-radius:3px; overflow:hidden; margin-left:8px}
+  .ctl .seg button{border:0; border-radius:0; margin:0}
+  .ctl .seg button.on{background:var(--ink); color:#fff}
+  .hint{color:var(--mute); font-size:12px; margin:2px 0 0}
+  @media(max-width:700px){ .stage{height:360px} table.pilot{font-size:12px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>FPS subsampling — pilot</h1>
+  <p class="sub">Proposal for the shared copies: keep a fixed farthest-point-sampled subset of the 2,048 material points — <b>512 for the cube</b>, <b>1,024 for the sand</b> — the same point ids in every episode. Toggle between the full cloud and the subset while the episode plays.</p>
+  <div id="summary"></div>
+  <table class="pilot" id="tbl"><thead><tr>
+    <th>episode</th><th>object</th><th>scenario</th><th>kept</th><th>NN spacing kept</th><th>speed</th><th>spin</th>
+  </tr></thead><tbody></tbody></table>
+  <p class="hint">Click a row to load it. Same viewer, same frames; the toggle only changes which points are drawn.</p>
+  <div id="viewer"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+  const COL = {shell2048: '#3f9a94', sand2048: '#d3a15a'};
+  const disc = vizDisc();
+  const cm = v => (v * 100).toFixed(0);
+  let current = null;
+
+  function buildViewer(host, meta, buf){
+    const N = meta.n_particles, T = meta.n_frames, DT_MS = meta.dt * 1000, H = meta.arena.wall_height;
+    const keep = Int32Array.from(meta.fps_indices), K = keep.length;
+    host.innerHTML = `<h2>${meta.stem} — ${meta.label}, ${meta.scenario} throw</h2>
+      <div class="stage"><canvas></canvas><div class="lbl"><b class="mode"></b><br><span class="m"></span></div></div>
+      <div class="ctl"><button class="play">Pause</button><button class="replay">Replay</button><input type="range" min="0" max="1" value="0" step="1"><span class="mono frame"></span>
+        <span class="seg"><button class="sub on">FPS ${K}</button><button class="full">all ${N}</button></span></div>
+      <p class="caption">Kept points keep their ids across every episode (same material points everywhere). Nearest-neighbour spacing among kept points ≈ ${meta.nn_kept_mm.toFixed(1)} mm vs ${meta.nn_full_mm.toFixed(1)} mm in the full set. Launched at ${meta.speed0.toFixed(1)} m/s from ${cm(meta.spawn_pos[2])} cm, spin ${meta.spin0.toFixed(1)} rad/s. Every ${meta.stride}th simulator frame. Drag to orbit, scroll to zoom.</p>`;
+    const canvas = host.querySelector('canvas');
+    const scene = new THREE.Scene(); scene.background = new THREE.Color('#fbfaf8');
+    const grid = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); grid.position.set(0.5, 0, 0.5); scene.add(grid);
+    const P = (x, y, z) => new THREE.Vector3(x, y, z);
+    scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0), P(1,0,0), P(1,0,1), P(0,0,1)]), new THREE.LineBasicMaterial({color: 0x444444})));
+    const up = new THREE.LineBasicMaterial({color: 0xb0b0b0});
+    for (const [x, z] of [[0,0],[1,0],[1,1],[0,1]]) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(x,0,z), P(x,H,z)]), up));
+    scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,H,0), P(1,H,0), P(1,H,1), P(0,H,1)]), new THREE.LineBasicMaterial({color: 0xcccccc})));
+    const axes = new THREE.AxesHelper(0.08); axes.position.set(-0.02, 0.001, -0.02); scene.add(axes);
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    const mat = new THREE.PointsMaterial({size: 0.0135, map: disc, color: COL[meta.config] || '#888', transparent: true, alphaTest: 0.4, depthWrite: true, sizeAttenuation: true});
+    const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts);
+    let mode = 'sub';
+    const renderer = new THREE.WebGLRenderer({canvas, antialias: true}); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const camera = new THREE.PerspectiveCamera(36, 1, 0.01, 100);
+    const controls = new THREE.OrbitControls(camera, canvas); controls.enableDamping = true; controls.dampingFactor = 0.08; controls.minDistance = 0.2; controls.maxDistance = 6; controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    const vx = meta.v0[0], vz = meta.v0[1], sp = Math.hypot(vx, vz);
+    const bx = sp > 0.1 ? -vx / sp : (meta.spawn_pos[0] < 0.5 ? -1 : 1), bz = sp > 0.1 ? -vz / sp : (meta.spawn_pos[1] < 0.5 ? -1 : 1);
+    camera.position.set(0.5 + bx * 1.35 - bz * 0.9, 0.95, 0.5 + bz * 1.35 + bx * 0.9); controls.target.set(0.5, 0.22, 0.5);
+    const scrub = host.querySelector('input[type=range]'), read = host.querySelector('.frame'), lbl = host.querySelector('.lbl .m'), modeLbl = host.querySelector('.lbl .mode'), playBtn = host.querySelector('.play');
+    const getSpeed = makeSpeed(host.querySelector('.ctl'), [[1,'Real time'],[4,'¼ speed'],[10,'1/10 speed'],[25,'1/25 speed']]);
+    host.querySelector('#speed').value = 4;
+    const clock = makeClock(() => getSpeed(), 900);
+    let frame = -1, playing = true, alive = true; scrub.max = T - 1;
+    const arr = geo.attributes.position.array;
+    function setFrame(f){
+      frame = f; const base = f * N * 3;
+      if (mode === 'full'){ arr.set(buf.subarray(base, base + N * 3)); geo.setDrawRange(0, N); }
+      else { for (let j = 0; j < K; j++){ const s = base + keep[j] * 3; arr[j*3] = buf[s]; arr[j*3+1] = buf[s+1]; arr[j*3+2] = buf[s+2]; } geo.setDrawRange(0, K); }
+      geo.attributes.position.needsUpdate = true;
+      scrub.value = f; read.textContent = `${f + 1} / ${T} · ${(f * DT_MS).toFixed(0)} ms`; lbl.textContent = `t = ${(f * DT_MS / 1000).toFixed(3)} s`;
+      modeLbl.textContent = mode === 'full' ? `all ${N} points` : `FPS ${K} of ${N}`;
+    }
+    function setMode(m){ mode = m; mat.size = m === 'full' ? 0.0135 : (K <= 512 ? 0.02 : 0.016); host.querySelector('.sub').classList.toggle('on', m === 'sub'); host.querySelector('.full').classList.toggle('on', m === 'full'); setFrame(frame < 0 ? 0 : frame); }
+    host.querySelector('.sub').onclick = () => setMode('sub'); host.querySelector('.full').onclick = () => setMode('full');
+    function render(){ const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return; const pr = renderer.getPixelRatio();
+      if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)){ renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); } renderer.render(scene, camera); }
+    function loop(ts){ if (!alive){ renderer.dispose(); return; } controls.update(); const f = Math.min(T - 1, Math.round(clock.tick(ts, playing, (T - 1) * DT_MS) / DT_MS)); if (f !== frame) setFrame(f); render(); requestAnimationFrame(loop); }
+    playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? 'Pause' : 'Play'; };
+    host.querySelector('.replay').onclick = () => { clock.set(0); setFrame(0); playing = true; playBtn.textContent = 'Pause'; };
+    scrub.oninput = function(){ playing = false; playBtn.textContent = 'Play'; setFrame(+this.value); clock.set(frame * DT_MS); };
+    setMode('sub'); requestAnimationFrame(loop);
+    return () => { alive = false; };
+  }
+
+  async function show(e, row){
+    document.querySelectorAll('#tbl tr.sel').forEach(r => r.classList.remove('sel')); row.classList.add('sel');
+    const host = document.getElementById('viewer'); if (current) current(); host.innerHTML = '<p class="caption">Loading…</p>';
+    const v = '?t=' + Date.now();
+    const meta = await (await fetch(`data/fps/${e.stem}/meta.json` + v)).json();
+    const buf = new Float32Array(await (await fetch(`data/fps/${e.stem}/pos.bin` + v)).arrayBuffer());
+    current = buildViewer(host, meta, buf); host.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+
+  async function init(){
+    const v = '?t=' + Date.now(); let index;
+    try { index = await (await fetch('data/fps/index.json' + v)).json(); } catch (err){ document.getElementById('summary').innerHTML = '<p class="caption">Could not load data/fps/index.json</p>'; return; }
+    document.getElementById('summary').innerHTML = `<p class="caption"><b>${index.length} episodes</b> · cube: 512 of 2,048 · sand: 1,024 of 2,048 · one fixed index set per object.</p>`;
+    const tb = document.querySelector('#tbl tbody');
+    index.forEach(e => { const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="mono">${e.stem}</td><td>${e.label}</td><td>${e.scenario}</td><td class="num">${e.k} / ${e.n_particles}</td><td class="num">${e.nn_kept_mm.toFixed(1)} mm (full ${e.nn_full_mm.toFixed(1)})</td><td class="num">${e.speed0.toFixed(1)} m/s</td><td class="num">${e.spin0.toFixed(1)} rad/s</td>`;
+      tr.onclick = () => show(e, tr); tb.appendChild(tr); });
+    show(index[0], tb.firstChild);
+  }
+  init();
+})();
+</script>
+</body>
+</html>

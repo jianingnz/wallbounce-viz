@@ -1,0 +1,222 @@
+[
+ {
+  "stem": "cube_ep_00000",
+  "label": "hollow elastic cube",
+  "scenario": "wall",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229841232299805,
+  "nn_full_mm": 9.048121452331543,
+  "speed0": 2.940648986884316,
+  "spin0": 2.4534269967782087
+ },
+ {
+  "stem": "cube_ep_00001",
+  "label": "hollow elastic cube",
+  "scenario": "slam",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229778289794922,
+  "nn_full_mm": 9.048359870910645,
+  "speed0": 3.9159337011617237,
+  "spin0": 11.800808126103753
+ },
+ {
+  "stem": "cube_ep_00002",
+  "label": "hollow elastic cube",
+  "scenario": "slam",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.22925567626953,
+  "nn_full_mm": 9.04769229888916,
+  "speed0": 3.86642977761066,
+  "spin0": 0.7912361628708613
+ },
+ {
+  "stem": "cube_ep_00003",
+  "label": "hollow elastic cube",
+  "scenario": "slam",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229705810546875,
+  "nn_full_mm": 9.048055648803711,
+  "speed0": 3.564902464968695,
+  "spin0": 7.350312801952658
+ },
+ {
+  "stem": "cube_ep_00004",
+  "label": "hollow elastic cube",
+  "scenario": "slam",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229703903198242,
+  "nn_full_mm": 9.048442840576172,
+  "speed0": 4.947608560475858,
+  "spin0": 8.158175418937162
+ },
+ {
+  "stem": "cube_ep_00005",
+  "label": "hollow elastic cube",
+  "scenario": "wall",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229822158813477,
+  "nn_full_mm": 9.048277854919434,
+  "speed0": 2.546326682801352,
+  "spin0": 3.00337568092828
+ },
+ {
+  "stem": "cube_ep_00006",
+  "label": "hollow elastic cube",
+  "scenario": "wall",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229595184326172,
+  "nn_full_mm": 9.048279762268066,
+  "speed0": 3.0224994333497124,
+  "spin0": 1.364710116084953
+ },
+ {
+  "stem": "cube_ep_00007",
+  "label": "hollow elastic cube",
+  "scenario": "slam",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229909896850586,
+  "nn_full_mm": 9.048320770263672,
+  "speed0": 3.692250495591844,
+  "spin0": 0.07369039615317874
+ },
+ {
+  "stem": "cube_ep_00008",
+  "label": "hollow elastic cube",
+  "scenario": "wall",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229835510253906,
+  "nn_full_mm": 9.048206329345703,
+  "speed0": 2.6645538573451195,
+  "spin0": 5.364370155209873
+ },
+ {
+  "stem": "cube_ep_00009",
+  "label": "hollow elastic cube",
+  "scenario": "wall",
+  "k": 512,
+  "n_particles": 2048,
+  "nn_kept_mm": 17.229690551757812,
+  "nn_full_mm": 9.048248291015625,
+  "speed0": 2.6224792046552823,
+  "spin0": 3.6964467418887548
+ },
+ {
+  "stem": "sand_ep_00000",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.912468910217285,
+  "nn_full_mm": 5.201657295227051,
+  "speed0": 0.0,
+  "spin0": 10.940718868300436
+ },
+ {
+  "stem": "sand_ep_00001",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.922990798950195,
+  "nn_full_mm": 5.1929521560668945,
+  "speed0": 1.8079658233937275,
+  "spin0": 11.903220708407764
+ },
+ {
+  "stem": "sand_ep_00002",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.918570518493652,
+  "nn_full_mm": 5.191015243530273,
+  "speed0": 3.105655528525692,
+  "spin0": 7.850371304429378
+ },
+ {
+  "stem": "sand_ep_00003",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.91621208190918,
+  "nn_full_mm": 5.1981987953186035,
+  "speed0": 3.070319274291362,
+  "spin0": 0.08216885863130452
+ },
+ {
+  "stem": "sand_ep_00004",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.91533088684082,
+  "nn_full_mm": 5.198023319244385,
+  "speed0": 5.80836327136304,
+  "spin0": 3.1681316875963703
+ },
+ {
+  "stem": "sand_ep_00005",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.915877342224121,
+  "nn_full_mm": 5.201767444610596,
+  "speed0": 4.6415394966914825,
+  "spin0": 2.664528598735552
+ },
+ {
+  "stem": "sand_ep_00006",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.918487548828125,
+  "nn_full_mm": 5.193012714385986,
+  "speed0": 0.0,
+  "spin0": 9.204209297673556
+ },
+ {
+  "stem": "sand_ep_00007",
+  "label": "sand sphere",
+  "scenario": "drop",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.915491104125977,
+  "nn_full_mm": 5.200161457061768,
+  "speed0": 0.0,
+  "spin0": 2.08194703911442
+ },
+ {
+  "stem": "sand_ep_00008",
+  "label": "sand sphere",
+  "scenario": "slam",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.915783882141113,
+  "nn_full_mm": 5.196170806884766,
+  "speed0": 5.694102433010277,
+  "spin0": 4.863597054209848
+ },
+ {
+  "stem": "sand_ep_00009",
+  "label": "sand sphere",
+  "scenario": "wall",
+  "k": 1024,
+  "n_particles": 2048,
+  "nn_kept_mm": 8.91220474243164,
+  "nn_full_mm": 5.197576999664307,
+  "speed0": 3.0661271938487076,
+  "spin0": 11.940963492057177
+ }
+]
