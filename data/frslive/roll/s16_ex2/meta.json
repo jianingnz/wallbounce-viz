@@ -1,1 +1,1 @@
-{"clip": "ep_00434_sand2048_sphere_drop", "dt_ms": 40.0, "n_frames": 10, "n_particles": 1024, "context_len": 2, "q_lo": -0.038380224257707596, "q_scale": 0.7872510142624378, "ade_mm": 27.82, "fde_mm": 43.99, "per_frame_mm": [3.37, 10.02, 17.72, 27.34, 37.47, 43.09, 39.56, 43.99]}
+{"clip": "ep_00434_sand2048_sphere_drop", "dt_ms": 40.0, "n_frames": 10, "n_particles": 1024, "context_len": 2, "q_lo": -0.03717183321714401, "q_scale": 0.7887778207659721, "ade_mm": 22.8, "fde_mm": 38.33, "per_frame_mm": [2.79, 8.09, 13.33, 20.71, 28.78, 36.04, 34.32, 38.33]}
