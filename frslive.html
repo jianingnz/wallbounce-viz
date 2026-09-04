@@ -34,6 +34,10 @@
   <svg id="c_roll" style="height:250px"></svg>
   <div class="leg" id="l_roll"></div>
   <table id="t_roll"></table>
+  <h2 id="pin_h" hidden>Stress case — corner splash</h2>
+  <p class="sub" id="pin_sub" hidden style="font-size:15px"></p>
+  <svg id="c_pin" style="height:220px" hidden></svg><div class="leg" id="l_pin"></div>
+  <p class="caption" id="pin_cap" hidden>A wall-throw that splashes into a corner: two wall planes and the floor engage at once — the hardest physics in this corpus, and the place where the nearest-wall feature's argmin switches between walls. Tracked at every checkpoint since it was flagged.</p>
   <div class="ex" id="ex"></div>
   <div id="stage"><canvas id="c"></canvas>
     <div class="lbl l"><b>ground truth</b></div><div class="lbl r" style="color:var(--s2)"><b>prediction</b> <span id="e_now" class="pill"></span></div></div>
@@ -126,14 +130,35 @@ async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`da
  ov.alloc(N);document.getElementById('scrub').max=T-1;
  document.getElementById('excap').textContent=`${meta.clip} · ${meta.dt_ms} ms steps · ${meta.n_frames} frames from 2 GT context frames · rollout ADE ${meta.ade_mm} mm, final frame ${meta.fde_mm} mm`;
  frame=-1;clock.set(0);setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
+function pinChart(H){const rows=H.filter(h=>Object.keys(h.pinned||{}).length);if(rows.length<1)return;
+ const clip=Object.keys(rows[rows.length-1].pinned)[0];const ks=Object.keys(rows[rows.length-1].pinned[clip]).map(Number).sort((a,b)=>a-b);
+ const C=[css('--s1'),css('--s3'),css('--s4'),css('--s2')];
+ for(const id of ['pin_h','pin_sub','c_pin','pin_cap'])document.getElementById(id).hidden=false;
+ document.getElementById('pin_sub').textContent=`${clip} — rollout error from 2 GT frames, tracked across checkpoints`;
+ const svg=document.getElementById('c_pin');const W=Math.max(svg.clientWidth,360),H2=220,L=60,R=14,Tp=10,B=28;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H2}`);
+ const xs=rows.map(r=>r.step),xmax=Math.max(200000,...xs);
+ const all=rows.flatMap(r=>ks.map(k=>r.pinned[clip][k]).filter(v=>v));
+ const lo=Math.max(1,Math.min(...all)/1.6),hi=Math.max(...all)*1.4;
+ const X=v=>L+(W-L-R)*v/xmax,Y=v=>Tp+(H2-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+ let g='';for(let d=Math.pow(10,Math.floor(Math.log10(lo)));d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d}</text>`;
+ for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*xmax)}" y="${H2-8}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
+ g+=`<text x="14" y="${Tp+(H2-Tp-B)/2}" font-size="11" fill="#666" transform="rotate(-90 14 ${Tp+(H2-Tp-B)/2})" text-anchor="middle">rollout error (mm)</text>`;
+ ks.forEach((k,i)=>{const pts=rows.filter(r=>r.pinned[clip][k]).map(r=>[r.step,r.pinned[clip][k]]);
+  g+=`<path d="${pts.map((p,j)=>(j?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${C[i%4]}" stroke-width="2"/>`;
+  pts.forEach(p=>{g+=`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="${C[i%4]}"/>`;});});
+ svg.innerHTML=g;
+ document.getElementById('l_pin').innerHTML=ks.map((k,i)=>`<span style="background:${C[i%4]}"></span>${k*2.5} ms steps`).join('');}
+
 (async()=>{
  S=await (await fetch('data/frslive/summary.json?t='+Date.now())).json();
+ let HIST=[];try{HIST=await (await fetch('data/frslive/history.json?t='+Date.now())).json();}catch(e){}
  try{curves=await (await fetch('data/curves_frs.json?t='+Date.now())).json();}catch(e){}
  document.getElementById('status').textContent=`${S.run} — step ${S.step.toLocaleString()} of 200,000 · context ${S.context_len} frames → ${S.future_len} predicted · updated ${S.updated}`;
  if(curves){const xm=200000;
    logChart('c_tr','l_tr',[{name:'train',color:css('--s1'),pts:curves.train_loss}].concat(curves.train_loss_ema?[{name:'train · EMA',color:css('--s3'),pts:curves.train_loss_ema}]:[]),xm);
    logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}
- winChart();rollChart();
+ winChart();rollChart();try{pinChart(HIST);}catch(e){}
  const ex=document.getElementById('ex');const all=[];
  for(const k of Object.keys(S.rollouts)) (S.rollouts[k].examples||[]).forEach(e=>all.push({...e,dt:S.rollouts[k].dt_ms}));
  all.forEach((e,i)=>{const b=document.createElement('button');b.textContent=`${e.dt} ms · ${e.ade_mm.toFixed(0)} mm`;b.className=i===0?'active':'';
