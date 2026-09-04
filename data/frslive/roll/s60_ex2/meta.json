@@ -1,1 +1,1 @@
-{"clip": "ep_00375_sand2048_sphere_wall", "dt_ms": 150.0, "n_frames": 6, "n_particles": 1024, "context_len": 2, "q_lo": -0.06552883237600327, "q_scale": 1.1345830783247948, "ade_mm": 48.27, "fde_mm": 51.25, "per_frame_mm": [35.28, 56.31, 50.23, 51.25]}
+{"clip": "ep_00375_sand2048_sphere_wall", "dt_ms": 150.0, "n_frames": 6, "n_particles": 1024, "context_len": 2, "q_lo": -0.06855893135070801, "q_scale": 1.1300621032714844, "ade_mm": 46.2, "fde_mm": 50.21, "per_frame_mm": [34.18, 51.72, 48.67, 50.21]}
