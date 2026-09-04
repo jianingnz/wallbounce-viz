@@ -95,7 +95,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setScissorTest(tru
 function mk(col){const sc=new THREE.Scene();sc.background=new THREE.Color('#fbfaf8');const geo=new THREE.BufferGeometry();
  const p=new THREE.Points(geo,new THREE.PointsMaterial({size:0.015,map:sprite,color:col,transparent:true,alphaTest:0.35,sizeAttenuation:true}));
  p.frustumCulled=false;sc.add(p);
- sc.add(Object.assign(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1.2,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7})),{position:new THREE.Vector3(0.5,0.6,0.5)}));
+ const eg=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1.2,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));
+ eg.position.set(0.5,0.6,0.5); sc.add(eg);   // r128: Object3D.position is read-only, must .set()
  const gr=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);gr.position.set(0.5,0,0.5);sc.add(gr);return {scene:sc,geo};}
 const V_gt=mk(0x1f5f8b),V_pr=mk(0xd4762c);const ov=makeOverlay(V_pr.scene,sprite,0.01);
 const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.7,1.15,1.85);
@@ -143,3 +144,6 @@ async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`da
    logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}});
 })();
 })();
+</script>
+</body>
+</html>
