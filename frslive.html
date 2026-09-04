@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Δt model — live</title>
+<link rel="stylesheet" href="site.css?v=20260903">
+<style>
+  svg{display:block;width:100%}
+  #stage{height:470px;position:relative} #stage canvas{width:100%;height:100%;display:block}
+  .lbl{position:absolute;top:8px} .lbl.l{left:10px} .lbl.r{left:calc(50% + 10px)}
+  .pill{font-size:12px;color:var(--soft)} td.ho{color:var(--s2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2 style="margin-top:4px">Δt-conditioned sand model — training in progress</h2>
+  <p class="sub" id="status">loading…</p>
+
+  <h2>Curves</h2>
+  <div class="charts">
+    <div><svg id="c_tr" style="height:210px"></svg><div class="leg" id="l_tr"></div><p class="caption">Training loss (log)</p></div>
+    <div><svg id="c_val" style="height:210px"></svg><div class="leg" id="l_val"></div><p class="caption">Validation loss (log) — live and EMA weights</p></div>
+  </div>
+
+  <h2>One window, per step size</h2>
+  <p class="sub" style="font-size:15px">2 ground-truth frames in, 2 frames predicted at that step size. † = never trained (interpolation probe).</p>
+  <svg id="c_win" style="height:250px"></svg>
+  <table id="t_win"></table>
+  <p class="caption">Mean particle error over the predicted window, val episodes. The error grows with the step because the window reaches further in time — 2 frames at 150 ms spans 300 ms of physics, 60× the 2.5 ms window.</p>
+
+  <h2>Whole episode, per step size</h2>
+  <p class="sub" style="font-size:15px">Only the first 2 ground-truth frames are given; the model then predicts the entire episode, each 2-frame chunk re-anchored on its own output.</p>
+  <svg id="c_roll" style="height:250px"></svg>
+  <div class="leg" id="l_roll"></div>
+  <table id="t_roll"></table>
+  <div class="ex" id="ex"></div>
+  <div id="stage"><canvas id="c"></canvas>
+    <div class="lbl l"><b>ground truth</b></div><div class="lbl r" style="color:var(--s2)"><b>prediction</b> <span id="e_now" class="pill"></span></div></div>
+  <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="10" value="0" step="1"><span class="mono" id="frame"></span><button id="ovl">GT → prediction vectors</button></div>
+  <p class="caption" id="excap"></p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let S=null, curves=null, meta=null, gt=null, pr=null, N=1024, T=1, frame=0, playing=true, dtms=5, ovOn=false;
+
+function logChart(id,legId,series,xmax){const svg=document.getElementById(id);const W=Math.max(svg.clientWidth,340),H=210,L=56,R=12,Tp=8,B=24;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const vals=series.flatMap(s=>s.pts.map(p=>p[1])).filter(v=>v>0);if(!vals.length){svg.innerHTML='';return;}
+ const lo=Math.pow(10,Math.floor(Math.log10(Math.min(...vals)))),hi=Math.pow(10,Math.ceil(Math.log10(Math.max(...vals))));
+ const X=s=>L+(W-L-R)*s/xmax,Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));let g='';
+ for(let d=lo;d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d.toExponential(0)}</text>`;
+ for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*xmax)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
+ for(const s of series)g+=`<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="1.8"/>`;
+ svg.innerHTML=g;document.getElementById(legId).innerHTML=series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('');}
+
+function winChart(){const svg=document.getElementById('c_win');const W=Math.max(svg.clientWidth,360),H=250,L=60,R=14,Tp=10,B=30;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const ks=Object.keys(S.windows).map(Number).sort((a,b)=>a-b);
+ const xs=ks.map(k=>S.windows[k].dt_ms),ys=ks.map(k=>S.windows[k].ade_mm);
+ const xmax=Math.max(...xs),lo=Math.max(0.05,Math.min(...ys)/2),hi=Math.max(...ys)*2;
+ const X=v=>L+(W-L-R)*v/xmax,Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));let g='';
+ for(let d=Math.pow(10,Math.floor(Math.log10(lo)));d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+ for(const t of [0,50,100,150])g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${t} ms</text>`;
+ g+=`<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})" text-anchor="middle">window error (mm)</text>`;
+ g+=`<path d="${ks.map((k,i)=>(i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(ys[i]).toFixed(1)).join('')}" fill="none" stroke="${css('--s1')}" stroke-width="2"/>`;
+ ks.forEach((k,i)=>{const ho=S.windows[k].held_out;g+=`<circle cx="${X(xs[i])}" cy="${Y(ys[i])}" r="${ho?5:3.5}" fill="${ho?css('--s2'):css('--s1')}"/>`;});
+ svg.innerHTML=g;
+ let h='<tr><th>step size</th>'+ks.map(k=>`<th>${S.windows[k].dt_ms}${S.windows[k].held_out?' †':''}</th>`).join('')+'</tr><tr><td>window ADE (mm)</td>'+
+   ks.map(k=>`<td class="${S.windows[k].held_out?'ho':''}">${S.windows[k].ade_mm.toFixed(2)}</td>`).join('')+'</tr>';
+ document.getElementById('t_win').innerHTML=h;}
+
+function rollChart(){const svg=document.getElementById('c_roll');const W=Math.max(svg.clientWidth,360),H=250,L=60,R=14,Tp=10,B=30;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const ks=Object.keys(S.rollouts).map(Number).sort((a,b)=>a-b);
+ const C=[css('--s1'),css('--s3'),css('--s4'),css('--s2')];
+ const tmax=Math.max(...ks.map(k=>S.rollouts[k].covered_ms));
+ const all=ks.flatMap(k=>S.rollouts[k].per_frame_mm).filter(v=>v>0);
+ const lo=Math.max(0.1,Math.min(...all)/2),hi=Math.max(...all)*1.6;
+ const X=t=>L+(W-L-R)*t/tmax,Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));let g='';
+ for(let d=Math.pow(10,Math.floor(Math.log10(lo)));d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+ for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*tmax)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*tmax)} ms</text>`;
+ g+=`<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})" text-anchor="middle">rollout error (mm)</text>`;
+ ks.forEach((k,i)=>{const r=S.rollouts[k];g+=`<path d="${r.per_frame_mm.map((v,j)=>(j?'L':'M')+X((j+1)*r.dt_ms).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${C[i%4]}" stroke-width="2"/>`;});
+ svg.innerHTML=g;
+ document.getElementById('l_roll').innerHTML=ks.map((k,i)=>`<span style="background:${C[i%4]}"></span>${S.rollouts[k].dt_ms} ms steps`).join('');
+ let h='<tr><th>step size</th><th>chunks</th><th>covers</th><th>rollout ADE (mm)</th><th>final-frame (mm)</th></tr>';
+ for(const k of ks){const r=S.rollouts[k];h+=`<tr><td>${r.dt_ms} ms</td><td>${Math.round(r.n_frames/2)}</td><td>${r.covered_ms} ms</td><td>${r.ade_mm.toFixed(1)}</td><td>${r.fde_mm.toFixed(1)}</td></tr>`;}
+ const tb=document.getElementById('t_roll');tb.innerHTML=h;markBest(tb,[3,4]);}
+
+// ---- 3D rollout viewer
+const canvas=document.getElementById('c');const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setScissorTest(true);const sprite=vizDisc();
+function mk(col){const sc=new THREE.Scene();sc.background=new THREE.Color('#fbfaf8');const geo=new THREE.BufferGeometry();
+ const p=new THREE.Points(geo,new THREE.PointsMaterial({size:0.015,map:sprite,color:col,transparent:true,alphaTest:0.35,sizeAttenuation:true}));
+ p.frustumCulled=false;sc.add(p);
+ sc.add(Object.assign(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1.2,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7})),{position:new THREE.Vector3(0.5,0.6,0.5)}));
+ const gr=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);gr.position.set(0.5,0,0.5);sc.add(gr);return {scene:sc,geo};}
+const V_gt=mk(0x1f5f8b),V_pr=mk(0xd4762c);const ov=makeOverlay(V_pr.scene,sprite,0.01);
+const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.7,1.15,1.85);
+const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0.5,0.35,0.5);controls.enableDamping=true;
+const getSpeed=makeSpeed(document.getElementById('play').parentElement);const clock=makeClock(getSpeed);
+function setFrame(f){if(!gt)return;frame=f;
+ V_gt.geo.attributes.position.array.set(gt.subarray(f*N*3,(f+1)*N*3));V_gt.geo.attributes.position.needsUpdate=true;
+ V_pr.geo.attributes.position.array.set(pr.subarray(f*N*3,(f+1)*N*3));V_pr.geo.attributes.position.needsUpdate=true;
+ ov.update(gt,pr,f,f,N);
+ document.getElementById('scrub').value=f;
+ document.getElementById('frame').textContent=`physics t = ${(f*dtms/1000).toFixed(2)} s`;
+ const k=f-meta.context_len;document.getElementById('e_now').textContent=k>=0&&meta.per_frame_mm[k]!==undefined?`· err ${meta.per_frame_mm[k].toFixed(1)} mm`:'· context';}
+function render(){const w=canvas.clientWidth,h=canvas.clientHeight,half=Math.floor(w/2);if(!w||!h)return;
+ const pr_=renderer.getPixelRatio();if(canvas.width!==Math.floor(w*pr_)||canvas.height!==Math.floor(h*pr_))renderer.setSize(w,h,false);
+ camera.aspect=half/h;camera.updateProjectionMatrix();
+ renderer.setViewport(0,0,half,h);renderer.setScissor(0,0,half,h);renderer.render(V_gt.scene,camera);
+ renderer.setViewport(half,0,w-half,h);renderer.setScissor(half,0,w-half,h);renderer.render(V_pr.scene,camera);}
+function loop(ts){controls.update();if(gt){const f=Math.min(T-1,Math.round(clock.tick(ts,playing,(T-1)*dtms)/dtms));if(f!==frame)setFrame(f);}render();requestAnimationFrame(loop);}
+document.getElementById('play').onclick=function(){playing=!playing;this.textContent=playing?'Pause':'Play';};
+document.getElementById('ovl').onclick=function(){ovOn=!ovOn;this.classList.toggle('active',ovOn);ov.setVisible(ovOn);setFrame(frame);};
+document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='Play';setFrame(+this.value);clock.set(frame*dtms);};
+async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`data/frslive/roll/${name}/meta.json${v}`)).json();
+ const dq=b=>{const u=new Uint16Array(b),f=new Float32Array(u.length);for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;};
+ const [g,p]=await Promise.all([fetch(`data/frslive/roll/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),fetch(`data/frslive/roll/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
+ gt=dq(g);pr=dq(p);N=meta.n_particles;T=meta.n_frames;dtms=meta.dt_ms;
+ for(const V of [V_gt,V_pr])V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));
+ ov.alloc(N);document.getElementById('scrub').max=T-1;
+ document.getElementById('excap').textContent=`${meta.clip} · ${meta.dt_ms} ms steps · ${meta.n_frames} frames from 2 GT context frames · rollout ADE ${meta.ade_mm} mm, final frame ${meta.fde_mm} mm`;
+ frame=-1;clock.set(0);setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
+(async()=>{
+ S=await (await fetch('data/frslive/summary.json?t='+Date.now())).json();
+ try{curves=await (await fetch('data/curves_frs.json?t='+Date.now())).json();}catch(e){}
+ document.getElementById('status').textContent=`${S.run} — step ${S.step.toLocaleString()} of 200,000 · context ${S.context_len} frames → ${S.future_len} predicted · updated ${S.updated}`;
+ if(curves){const xm=200000;
+   logChart('c_tr','l_tr',[{name:'train',color:css('--s1'),pts:curves.train_loss}].concat(curves.train_loss_ema?[{name:'train · EMA',color:css('--s3'),pts:curves.train_loss_ema}]:[]),xm);
+   logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}
+ winChart();rollChart();
+ const ex=document.getElementById('ex');const all=[];
+ for(const k of Object.keys(S.rollouts)) (S.rollouts[k].examples||[]).forEach(e=>all.push({...e,dt:S.rollouts[k].dt_ms}));
+ all.forEach((e,i)=>{const b=document.createElement('button');b.textContent=`${e.dt} ms · ${e.ade_mm.toFixed(0)} mm`;b.className=i===0?'active':'';
+   b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(e.name);};ex.appendChild(b);});
+ if(all.length)await loadEx(all[0].name);
+ requestAnimationFrame(loop);addEventListener('resize',()=>{winChart();rollChart();if(curves){const xm=200000;
+   logChart('c_tr','l_tr',[{name:'train',color:css('--s1'),pts:curves.train_loss}],xm);
+   logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}});
+})();
+})();

@@ -49,6 +49,10 @@
    "date": "2026-09-08",
    "items": [
     {
+     "label": "\u0394t model (live training)",
+     "src": "../frslive.html"
+    },
+    {
      "label": "New episodes: sand sphere + shell cube",
      "src": "../episodes.html"
     },
