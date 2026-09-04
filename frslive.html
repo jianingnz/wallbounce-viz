@@ -129,6 +129,13 @@ function loop(ts){controls.update();if(gt){const f=Math.min(T-1,Math.round(clock
 document.getElementById('play').onclick=function(){playing=!playing;this.textContent=playing?'Pause':'Play';};
 document.getElementById('ovl').onclick=function(){ovOn=!ovOn;this.classList.toggle('active',ovOn);ov.setVisible(ovOn);setFrame(frame);};
 document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='Play';setFrame(+this.value);clock.set(frame*dtms);};
+ function paintSrc(){const sr=document.getElementById('ex_src');sr.innerHTML='';
+   const opts=[['pred','mean · 1 step',meta?meta.ade_mm:null]].concat(((meta&&meta.samples)||[]).map((sm,i)=>[sm.name,`sample ${i+1} · 25 steps`,sm.ade_mm]));
+   if(opts.length<2){sr.style.display='none';return;} sr.style.display='';
+   opts.forEach(([f,lab,ade])=>{const b=document.createElement('button');
+     b.textContent=ade!=null?`${lab} · ${ade.toFixed(0)} mm`:lab;
+     b.className=(f===curSrc?'active':'');
+     b.onclick=()=>{curSrc=f;paintSrc();loadPred(f);};sr.appendChild(b);});}
 async function loadPred(field){const v='?t='+Date.now();
  const buf=await fetch(`data/frslive/roll/${curName}/${field}.bin${v}`).then(r=>r.arrayBuffer());
  const u=new Uint16Array(buf);pr=new Float32Array(u.length);for(let i=0;i<u.length;i++)pr[i]=u[i]/65535*meta.q_scale+meta.q_lo;
@@ -186,13 +193,6 @@ function pinChart(H){const rows=H.filter(h=>Object.keys(h.pinned||{}).length);if
  const labs=Object.keys(S.grid||{});let curLab=labs[0],curS=null;
  const scn=document.getElementById('ex_scn'),dtr=document.getElementById('ex_dt');
  const NAME={corner:'corner splash',wall:'wall throw',drop:'drop',slam:'slam'};
- function paintSrc(){const sr=document.getElementById('ex_src');sr.innerHTML='';
-   const opts=[['pred','mean · 1 step',meta?meta.ade_mm:null]].concat(((meta&&meta.samples)||[]).map((sm,i)=>[sm.name,`sample ${i+1} · 25 steps`,sm.ade_mm]));
-   if(opts.length<2){sr.style.display='none';return;} sr.style.display='';
-   opts.forEach(([f,lab,ade])=>{const b=document.createElement('button');
-     b.textContent=ade!=null?`${lab} · ${ade.toFixed(0)} mm`:lab;
-     b.className=(f===curSrc?'active':'');
-     b.onclick=()=>{curSrc=f;paintSrc();loadPred(f);};sr.appendChild(b);});}
  function paintDt(){dtr.innerHTML='';const byS=S.grid[curLab];
    Object.keys(byS).map(Number).sort((a,b)=>a-b).forEach((k,i)=>{const v=byS[k];
      const b=document.createElement('button');b.textContent=`${v.dt_ms} ms · ${v.ade_mm.toFixed(0)} mm`;
