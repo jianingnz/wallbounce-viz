@@ -30,7 +30,7 @@
   <p class="caption">Mean particle error over the predicted window, val episodes. The error grows with the step because the window reaches further in time — 2 frames at 150 ms spans 300 ms of physics, 60× the 2.5 ms window.</p>
 
   <h2>Whole episode, per step size</h2>
-  <p class="sub" style="font-size:15px">Only the first 2 ground-truth frames are given; the model then predicts the entire episode, each 2-frame chunk re-anchored on its own output.</p>
+  <p class="sub" style="font-size:15px">Only the first 2 ground-truth frames are given; the model then predicts forward, each 2-frame chunk re-anchored on its own output, until it reaches a <b>common 400 ms horizon</b> — the same physical span for every step size, so the columns compare like with like. A coarse step may overshoot the end of the episode; those frames are still predicted but not scored, and the final-frame error is taken at the last frame that still has ground truth. Each chunk is produced by a single forward pass (one-shot at t = 999), the sampler that measured best for chained prediction in the earlier big-step-vs-AR study.</p>
   <svg id="c_roll" style="height:250px"></svg>
   <div class="leg" id="l_roll"></div>
   <table id="t_roll"></table>
@@ -41,7 +41,7 @@
   <h2>Four scenarios × every step size</h2>
   <p class="sub" style="font-size:15px">The same four episodes — a corner splash, a wall throw, a drop and a slam — each predicted from 2 ground-truth frames all the way to the end of the episode, at every step size in the ladder. Rollout ADE in mm; blank = the episode is too short to hold a window at that step.</p>
   <table id="t_grid"></table>
-  <p class="caption">Lower is better; the best step size for each scenario is highlighted. Fine steps take many more chained chunks to cover the same span, so their errors accumulate — coarse steps cover the episode in a handful of predictions.</p>
+  <p class="caption">Lower is better; the best step size for each scenario is highlighted. Every column covers the same 400 ms of physics, so the differences are the step size alone: fine steps need up to 80 chained chunks and accumulate drift, while coarse steps get there in two or three predictions but each one is harder.</p>
   <div class="ex" id="ex_scn"></div>
   <div class="ex" id="ex_dt" style="margin-top:-4px"></div>
   <div id="stage"><canvas id="c"></canvas>
@@ -84,7 +84,7 @@ function winChart(){const svg=document.getElementById('c_win');const W=Math.max(
 function rollChart(){const svg=document.getElementById('c_roll');const W=Math.max(svg.clientWidth,360),H=250,L=60,R=14,Tp=10,B=30;
  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const ks=Object.keys(S.rollouts).map(Number).sort((a,b)=>a-b);
  const C=[css('--s1'),css('--s3'),css('--s4'),css('--s2')];
- const tmax=Math.max(...ks.map(k=>S.rollouts[k].covered_ms));
+ const tmax=Math.max(...ks.map(k=>S.rollouts[k].horizon_ms||400));
  const all=ks.flatMap(k=>S.rollouts[k].per_frame_mm).filter(v=>v>0);
  const lo=Math.max(0.1,Math.min(...all)/2),hi=Math.max(...all)*1.6;
  const X=t=>L+(W-L-R)*t/tmax,Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));let g='';
@@ -94,8 +94,8 @@ function rollChart(){const svg=document.getElementById('c_roll');const W=Math.ma
  ks.forEach((k,i)=>{const r=S.rollouts[k];g+=`<path d="${r.per_frame_mm.map((v,j)=>(j?'L':'M')+X((j+1)*r.dt_ms).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${C[i%4]}" stroke-width="2"/>`;});
  svg.innerHTML=g;
  document.getElementById('l_roll').innerHTML=ks.map((k,i)=>`<span style="background:${C[i%4]}"></span>${S.rollouts[k].dt_ms} ms steps`).join('');
- let h='<tr><th>step size</th><th>chunks</th><th>covers</th><th>rollout ADE (mm)</th><th>final-frame (mm)</th></tr>';
- for(const k of ks){const r=S.rollouts[k];h+=`<tr><td>${r.dt_ms} ms</td><td>${Math.round(r.n_frames/2)}</td><td>${r.covered_ms} ms</td><td>${r.ade_mm.toFixed(1)}</td><td>${r.fde_mm.toFixed(1)}</td></tr>`;}
+ let h='<tr><th>step size</th><th>chunks to the horizon</th><th>predicted</th><th>rollout ADE (mm)</th><th>error at last GT frame (mm)</th></tr>';
+ for(const k of ks){const r=S.rollouts[k];h+=`<tr><td>${r.dt_ms} ms</td><td>${Math.ceil((r.predicted_ms||400)/(2*r.dt_ms))}</td><td>${r.predicted_ms||''} ms</td><td data-v="1">${r.ade_mm.toFixed(1)}</td><td data-v="1">${r.fde_mm.toFixed(1)}</td></tr>`;}
  const tb=document.getElementById('t_roll');tb.innerHTML=h;markBest(tb,[3,4]);}
 
 // ---- 3D rollout viewer
