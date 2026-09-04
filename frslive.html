@@ -38,7 +38,12 @@
   <p class="sub" id="pin_sub" hidden style="font-size:15px"></p>
   <svg id="c_pin" style="height:220px" hidden></svg><div class="leg" id="l_pin"></div>
   <p class="caption" id="pin_cap" hidden>A wall-throw that splashes into a corner: two wall planes and the floor engage at once — the hardest physics in this corpus, and the place where the nearest-wall feature's argmin switches between walls. Tracked at every checkpoint since it was flagged.</p>
-  <div class="ex" id="ex"></div>
+  <h2>Four scenarios × every step size</h2>
+  <p class="sub" style="font-size:15px">The same four episodes — a corner splash, a wall throw, a drop and a slam — each predicted from 2 ground-truth frames all the way to the end of the episode, at every step size in the ladder. Rollout ADE in mm; blank = the episode is too short to hold a window at that step.</p>
+  <table id="t_grid"></table>
+  <p class="caption">Lower is better; the best step size for each scenario is highlighted. Fine steps take many more chained chunks to cover the same span, so their errors accumulate — coarse steps cover the episode in a handful of predictions.</p>
+  <div class="ex" id="ex_scn"></div>
+  <div class="ex" id="ex_dt" style="margin-top:-4px"></div>
   <div id="stage"><canvas id="c"></canvas>
     <div class="lbl l"><b>ground truth</b></div><div class="lbl r" style="color:var(--s2)"><b>prediction</b> <span id="e_now" class="pill"></span></div></div>
   <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="10" value="0" step="1"><span class="mono" id="frame"></span><button id="ovl">GT → prediction vectors</button></div>
@@ -130,11 +135,22 @@ async function loadEx(name){const v='?t='+Date.now();meta=await (await fetch(`da
  ov.alloc(N);document.getElementById('scrub').max=T-1;
  document.getElementById('excap').textContent=`${meta.clip} · ${meta.dt_ms} ms steps · ${meta.n_frames} frames from 2 GT context frames · rollout ADE ${meta.ade_mm} mm, final frame ${meta.fde_mm} mm`;
  frame=-1;clock.set(0);setFrame(0);playing=true;document.getElementById('play').textContent='Pause';}
+function gridTable(){const g=S.grid||{};const labs=Object.keys(g);if(!labs.length)return;
+ const ks=[...new Set(labs.flatMap(l=>Object.keys(g[l]).map(Number)))].sort((a,b)=>a-b);
+ const NAME={corner:'corner splash',wall:'wall throw',drop:'drop',slam:'slam'};
+ let h='<tr><th>scenario</th>'+ks.map(k=>`<th>${k*2.5} ms</th>`).join('')+'</tr>';
+ for(const l of labs){h+=`<tr><td>${NAME[l]||l}</td>`+ks.map(k=>g[l][k]?`<td data-v="1">${g[l][k].ade_mm.toFixed(0)}</td>`:'<td></td>').join('')+'</tr>';}
+ const tb=document.getElementById('t_grid');tb.innerHTML=h;
+ [...tb.rows].slice(1).forEach(r=>{let best=null,bv=Infinity;
+   [...r.cells].slice(1).forEach(c=>{const v=parseFloat(c.textContent);if(!isNaN(v)&&v<bv){bv=v;best=c;}});
+   if(best)best.classList.add('best');});}
+
 function pinChart(H){const rows=H.filter(h=>Object.keys(h.pinned||{}).length);if(rows.length<1)return;
- const clip=Object.keys(rows[rows.length-1].pinned)[0];const ks=Object.keys(rows[rows.length-1].pinned[clip]).map(Number).sort((a,b)=>a-b);
- const C=[css('--s1'),css('--s3'),css('--s4'),css('--s2')];
+ const last=rows[rows.length-1].pinned;const clip=('corner' in last)?'corner':Object.keys(last)[0];
+ const ks=Object.keys(last[clip]).map(Number).sort((a,b)=>a-b);
+ const C=[css('--s1'),css('--s3'),css('--s4'),css('--s2'),'#8a6d3b','#4a7c59','#7a5aa6','#c0392b'];
  for(const id of ['pin_h','pin_sub','c_pin','pin_cap'])document.getElementById(id).hidden=false;
- document.getElementById('pin_sub').textContent=`${clip} — rollout error from 2 GT frames, tracked across checkpoints`;
+ document.getElementById('pin_sub').textContent=`${S.showcase?(S.showcase.find(x=>x.label===clip)||{}).clip||clip:clip} — rollout error from 2 GT frames, tracked across checkpoints`;
  const svg=document.getElementById('c_pin');const W=Math.max(svg.clientWidth,360),H2=220,L=60,R=14,Tp=10,B=28;
  svg.setAttribute('viewBox',`0 0 ${W} ${H2}`);
  const xs=rows.map(r=>r.step),xmax=Math.max(200000,...xs);
@@ -144,7 +160,7 @@ function pinChart(H){const rows=H.filter(h=>Object.keys(h.pinned||{}).length);if
  let g='';for(let d=Math.pow(10,Math.floor(Math.log10(lo)));d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d}</text>`;
  for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*xmax)}" y="${H2-8}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
  g+=`<text x="14" y="${Tp+(H2-Tp-B)/2}" font-size="11" fill="#666" transform="rotate(-90 14 ${Tp+(H2-Tp-B)/2})" text-anchor="middle">rollout error (mm)</text>`;
- ks.forEach((k,i)=>{const pts=rows.filter(r=>r.pinned[clip][k]).map(r=>[r.step,r.pinned[clip][k]]);
+ ks.forEach((k,i)=>{const pts=rows.filter(r=>r.pinned[clip]&&r.pinned[clip][k]).map(r=>[r.step,r.pinned[clip][k]]);
   g+=`<path d="${pts.map((p,j)=>(j?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${C[i%4]}" stroke-width="2"/>`;
   pts.forEach(p=>{g+=`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="${C[i%4]}"/>`;});});
  svg.innerHTML=g;
@@ -159,11 +175,23 @@ function pinChart(H){const rows=H.filter(h=>Object.keys(h.pinned||{}).length);if
    logChart('c_tr','l_tr',[{name:'train',color:css('--s1'),pts:curves.train_loss}].concat(curves.train_loss_ema?[{name:'train · EMA',color:css('--s3'),pts:curves.train_loss_ema}]:[]),xm);
    logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}
  winChart();rollChart();try{pinChart(HIST);}catch(e){}
- const ex=document.getElementById('ex');const all=[];
- for(const k of Object.keys(S.rollouts)) (S.rollouts[k].examples||[]).forEach(e=>all.push({...e,dt:S.rollouts[k].dt_ms}));
- all.forEach((e,i)=>{const b=document.createElement('button');b.textContent=`${e.dt} ms · ${e.ade_mm.toFixed(0)} mm`;b.className=i===0?'active':'';
-   b.onclick=()=>{ex.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(e.name);};ex.appendChild(b);});
- if(all.length)await loadEx(all[0].name);
+ gridTable();
+ const labs=Object.keys(S.grid||{});let curLab=labs[0],curS=null;
+ const scn=document.getElementById('ex_scn'),dtr=document.getElementById('ex_dt');
+ const NAME={corner:'corner splash',wall:'wall throw',drop:'drop',slam:'slam'};
+ function paintDt(){dtr.innerHTML='';const byS=S.grid[curLab];
+   Object.keys(byS).map(Number).sort((a,b)=>a-b).forEach((k,i)=>{const v=byS[k];
+     const b=document.createElement('button');b.textContent=`${v.dt_ms} ms · ${v.ade_mm.toFixed(0)} mm`;
+     if(curS===null&&i===0)curS=String(k);
+     b.className=String(k)===String(curS)?'active':'';
+     b.onclick=()=>{curS=String(k);paintDt();loadEx(byS[k].name);};dtr.appendChild(b);});}
+ labs.forEach(lab=>{const b=document.createElement('button');b.textContent=NAME[lab]||lab;
+   b.className=lab===curLab?'active':'';
+   b.onclick=()=>{curLab=lab;scn.querySelectorAll('button').forEach(x=>x.className='');b.className='active';
+     const ks=Object.keys(S.grid[lab]).map(Number).sort((a,b)=>a-b);
+     if(!S.grid[lab][curS])curS=String(ks[0]);paintDt();loadEx(S.grid[lab][curS].name);};scn.appendChild(b);});
+ paintDt();
+ if(labs.length)await loadEx(S.grid[curLab][curS].name);
  requestAnimationFrame(loop);addEventListener('resize',()=>{winChart();rollChart();if(curves){const xm=200000;
    logChart('c_tr','l_tr',[{name:'train',color:css('--s1'),pts:curves.train_loss}],xm);
    logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}});
