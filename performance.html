@@ -49,13 +49,21 @@
   <div class="g4" id="grid_dt"></div>
 
   <p class="ttl">Error along the rollout <span>mean over <b id="n_stats">–</b> validation episodes</span></p>
-  <svg id="c_roll" style="height:280px"></svg><div class="leg" id="l_roll"></div>
   <table id="t_roll"></table>
 
   <p class="ttl">Step sizes the model never trained on
     <span>30 and 80 ms, next to the trained rungs on either side</span></p>
   <div class="g3" id="grid_ho"></div>
   <table id="t_ho"></table>
+  <div class="g2">
+    <div><svg id="c_w1" style="height:260px"></svg><div class="leg" id="l_w1"></div></div>
+    <div><svg id="c_w2" style="height:260px"></svg><div class="leg" id="l_w2"></div></div>
+  </div>
+  <p class="note">Single window, one prediction from 2 GT frames. On the left the trained rungs fall on a
+    straight line in log-log — error grows as a power of the step size, not a jump at any one rung. Dividing
+    each error by its own step size (right) removes that growth and leaves the velocity error, which is nearly
+    flat. The two never-trained rungs sit well above both lines.</p>
+  <table id="t_win"></table>
 
   <p class="ttl">One denoising step vs twenty-five <span>identical weights, identical code path</span></p>
   <div class="ctl">
@@ -64,13 +72,6 @@
   </div>
   <div class="g4" id="grid_s"></div>
   <table id="t_s"></table>
-
-  <p class="ttl">Single-window error vs step size <span>one prediction from 2 GT frames — why the curve bends</span></p>
-  <div class="g2">
-    <div><svg id="c_w1" style="height:260px"></svg><div class="leg" id="l_w1"></div></div>
-    <div><svg id="c_w2" style="height:260px"></svg><div class="leg" id="l_w2"></div></div>
-  </div>
-  <table id="t_win"></table>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -285,10 +286,6 @@ async function sectionSAMP(){
 }
 function sectionROLL(){
   const ks = Object.keys(S.rollouts).map(Number).filter(k=>!S.rollouts[k].held_out).sort((a,b)=>a-b);
-  const C = [css('--s1'),css('--s3'),css('--s4'),css('--s2'),'#8c6d3f','#3b7f7c','#a4436f','#5a6acf'];
-  const series = ks.map((k,i) => ({name: S.rollouts[k].dt_ms+' ms', color: C[i%8],
-    pts: S.rollouts[k].per_frame_mm.map((v,j) => [(j+1)*S.rollouts[k].dt_ms, v])}));
-  logChart('c_roll','l_roll',series,HORIZON,'error (mm)',d=>d<1?d:d.toFixed(0),[0,100,200,300,400]);
   const at = (r,ms) => { const j = Math.round(ms/r.dt_ms)-1;
     return (j>=0 && j<r.per_frame_mm.length) ? r.per_frame_mm[j].toFixed(1) : '–'; };
   let h = '<tr><th>step size</th><th>AR chunks</th><th>100 ms</th><th>200 ms</th><th>300 ms</th>'
