@@ -1,0 +1,1 @@
+{"clip": "ep_00375_sand2048_sphere_wall", "dt_ms": 100.0, "held_out": false, "n_frames": 6, "n_gt_frames": 6, "n_particles": 512, "context_len": 2, "q_lo": 6.142258644104004e-05, "q_scale": 1.0780762135982513, "ade_mm": 16.36, "fde_mm": 21.59, "scored_ms": 400.0, "per_frame_mm": [8.27, 14.24, 21.32, 21.59], "variants": []}

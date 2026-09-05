@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Rollout performance — frs1024_c2n2_dt150</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  .wrap{max-width:1320px; position:relative; z-index:1}
+  #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
+  .ttl{font-family:var(--serif); font-size:20px; font-weight:600; margin:34px 0 2px}
+  .ttl:first-child{margin-top:8px}
+  .ttl span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft); letter-spacing:.02em}
+  .ctl{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0 4px;
+       font-size:12.5px; color:var(--soft)}
+  .ctl select{font:inherit; font-size:12.5px; color:var(--ink); background:#fff; border:1px solid var(--line);
+              padding:3px 6px}
+  .ctl b{color:var(--ink); font-weight:600}
+  .g4{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:12px 0 0}
+  .g3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:12px 0 0}
+  .g2{display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin:12px 0 0}
+  .tile{margin:0}
+  .tile .view{height:230px; border:1px solid var(--line); background:transparent}
+  .tile .view.ho{border-color:var(--s2)}
+  .tile figcaption{font-size:12px; color:var(--soft); margin:5px 1px 0; line-height:1.35}
+  .tile figcaption b{color:var(--ink); font-weight:600}
+  .tile figcaption .ho{color:var(--s2); font-weight:600}
+  svg{width:100%; display:block}
+  table{margin-top:12px}
+  td.k,th:first-child{text-align:left}
+  td.ho{color:var(--s2)}
+  .note{font-size:13px; color:#333; margin:10px 0 0; line-height:1.5; max-width:70ch}
+  @media(max-width:1100px){ .g4{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:700px){ .g4,.g3,.g2{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="wrap">
+
+  <p class="ttl">Autoregressive rollout at every trained step size
+    <span>same episode, same 400 ms of physics, same playback time — from 2 ground-truth frames only</span></p>
+  <div class="ctl">
+    <label>episode <select id="ep"></select></label>
+    <label>speed <select id="sp"></select></label>
+    <b id="lab_ade"></b>
+    <span id="leg"></span>
+  </div>
+  <div class="g4" id="grid_dt"></div>
+
+  <p class="ttl">Error along the rollout <span>mean over <b id="n_stats">–</b> validation episodes</span></p>
+  <svg id="c_roll" style="height:280px"></svg><div class="leg" id="l_roll"></div>
+  <table id="t_roll"></table>
+
+  <p class="ttl">Step sizes the model never trained on
+    <span>30 and 80 ms, next to the trained rungs on either side</span></p>
+  <div class="g3" id="grid_ho"></div>
+  <table id="t_ho"></table>
+
+  <p class="ttl">One denoising step vs twenty-five <span>identical weights, identical code path</span></p>
+  <div class="ctl">
+    <label>episode <select id="ep2"></select></label>
+    <label>step size <select id="dt2"></select></label>
+  </div>
+  <div class="g4" id="grid_s"></div>
+  <table id="t_s"></table>
+
+  <p class="ttl">Single-window error vs step size <span>one prediction from 2 GT frames — why the curve bends</span></p>
+  <div class="g2">
+    <div><svg id="c_w1" style="height:260px"></svg><div class="leg" id="l_w1"></div></div>
+    <div><svg id="c_w2" style="height:260px"></svg><div class="leg" id="l_w2"></div></div>
+  </div>
+  <table id="t_win"></table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const V = '?t=' + Date.now();
+const GT_COL = '#b9b4ab', PR_COL = '#d4762c', HO_COL = '#c0392b', ALT = ['#1f5f8b','#3d8b5a','#7a5aa6'];
+const HORIZON = 400;                      // ms of physics every tile covers
+let SPEED = 8;                            // wall-clock ms per physical ms
+const disc = vizDisc();
+const clock = makeClock(() => SPEED, 600);
+let S = null, tiles = [], frame = -1;
+
+// ---- one shared WebGL canvas, one scissor viewport per tile
+const canvas = document.getElementById('bg');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
+camera.position.set(2.05, 1.25, 2.05);
+const controls = new THREE.OrbitControls(camera, document.getElementById('grid_dt'));
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.enableZoom = false; controls.enablePan = false;
+controls.maxPolarAngle = Math.PI/2 - 0.02; controls.target.set(0.5, 0.28, 0.5);
+
+function arena(H){
+  const s = new THREE.Scene();
+  const g = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); g.position.set(0.5,0,0.5); s.add(g);
+  const P = (a,b,c) => new THREE.Vector3(a,b,c);
+  s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0),P(1,0,0),P(1,0,1),P(0,0,1)]),
+       new THREE.LineBasicMaterial({color:0x444444})));
+  const up = new THREE.LineBasicMaterial({color:0xc4c4c4});
+  for (const [a,c] of [[0,0],[1,0],[1,1],[0,1]])
+    s.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(a,0,c),P(a,H,c)]), up));
+  return s;
+}
+function cloud(scene, col, size){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+  const p = new THREE.Points(geo, new THREE.PointsMaterial({size, map:disc, color:col,
+              transparent:true, alphaTest:0.4, sizeAttenuation:true}));
+  p.frustumCulled = false; scene.add(p); return geo;
+}
+function render(){
+  const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+  if (canvas.width !== Math.floor(w*pr) || canvas.height !== Math.floor(h*pr)) renderer.setSize(w, h, false);
+  renderer.setScissorTest(false); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.setScissorTest(true); renderer.setClearColor(0xfbfaf8, 1);
+  for (const t of tiles){
+    if (!t.scene) continue;
+    const r = t.el.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) continue;
+    renderer.setViewport(r.left, innerHeight-r.bottom, r.width, r.height);
+    renderer.setScissor(r.left, innerHeight-r.bottom, r.width, r.height);
+    camera.aspect = r.width/r.height; camera.updateProjectionMatrix();
+    renderer.render(t.scene, camera);
+  }
+  renderer.setScissorTest(false);
+}
+function setPhys(ms){
+  for (const t of tiles){
+    if (!t.buf) continue;
+    const f = Math.min(t.meta.n_frames-1, Math.floor(ms / t.meta.dt_ms));
+    if (f === t.f) continue;
+    t.f = f;
+    for (const c of t.clouds){
+      const n = t.meta.n_particles, base = f*n*3;
+      if (c.geo.attributes.position.array.length !== n*3)
+        c.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+      c.geo.attributes.position.array.set(c.data.subarray(base, base+n*3));
+      c.geo.attributes.position.needsUpdate = true;
+    }
+  }
+}
+function loop(ts){
+  controls.update();
+  const ms = clock.tick(ts, true, HORIZON);
+  if (ms !== frame){ frame = ms; setPhys(ms); }
+  render(); requestAnimationFrame(loop);
+}
+
+// ---- data
+const cache = new Map();
+async function loadBin(dir, name, meta){
+  const key = dir+'/'+name;
+  if (cache.has(key)) return cache.get(key);
+  const raw = new Uint16Array(await (await fetch(`data/frsperf/roll/${dir}/${name}.bin`+V)).arrayBuffer());
+  const out = new Float32Array(raw.length);
+  const lo = meta.q_lo, sc = meta.q_scale/65535;
+  for (let i=0;i<raw.length;i++) out[i] = lo + raw[i]*sc;
+  cache.set(key, out); return out;
+}
+async function meta(dir){
+  const key = dir+'/meta';
+  if (!cache.has(key)) cache.set(key, await (await fetch(`data/frsperf/roll/${dir}/meta.json`+V)).json());
+  return cache.get(key);
+}
+
+/* Build one tile: `layers` is [{bin, color, size}] drawn into the same scene.
+   Ground truth is always the pale layer underneath. */
+async function tile(host, dir, caption, layers, hoBorder){
+  const fig = document.createElement('figure'); fig.className = 'tile';
+  fig.innerHTML = `<div class="view${hoBorder?' ho':''}"></div><figcaption>${caption}</figcaption>`;
+  host.appendChild(fig);
+  const el = fig.querySelector('.view');
+  const m = await meta(dir);
+  const sc = arena(1.2);
+  const clouds = [];
+  for (const L of layers){
+    const data = await loadBin(dir, L.bin, m);
+    clouds.push({geo: cloud(sc, L.color, L.size), data});
+  }
+  const t = {el, scene: sc, clouds, meta: m, f: -1, buf: true};
+  tiles.push(t); return t;
+}
+function clear(host){
+  tiles = tiles.filter(t => !host.contains(t.el));
+  host.innerHTML = '';
+}
+
+// ---- charts
+function logChart(id, legId, series, xmax, ylab, tick, xtick, logx){
+  const svg = document.getElementById(id), W = Math.max(svg.clientWidth, 340);
+  const H = svg.clientHeight || 260, L = 64, R = 16, Tp = 12, B = 30;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const vals = series.flatMap(s => s.pts.map(p => p[1])).filter(v => v > 0);
+  if (!vals.length){ svg.innerHTML=''; return; }
+  const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
+  const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+  const xs = series.flatMap(s => s.pts.map(p => p[0]));
+  const x0 = logx ? Math.min(...xs) : 0, x1 = logx ? Math.max(...xs) : xmax;
+  const X = v => logx ? L+(W-L-R)*(Math.log10(v)-Math.log10(x0))/(Math.log10(x1)-Math.log10(x0))
+                      : L+(W-L-R)*v/x1;
+  const Y = v => Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+  let g = '';
+  for (let d=lo; d<=hi*1.0001; d*=10)
+    g += `<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/>`
+       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${tick(d)}</text>`;
+  for (const v of xtick)
+    g += `<text x="${X(v)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${v}</text>`;
+  g += `<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" text-anchor="middle"
+        transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})">${ylab}</text>`;
+  for (const s of series){
+    if (s.pts.length > 1)
+      g += `<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}"
+             fill="none" stroke="${s.color}" stroke-width="${s.w===undefined?1.9:s.w}" ${s.dash?`stroke-dasharray="4 3"`:''}/>`;
+    if (s.dots) for (const p of s.pts)
+      g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${p[2]?5:3.4}" fill="${p[2]?HO_COL:s.color}"/>`;
+  }
+  svg.innerHTML = g;
+  if (legId) document.getElementById(legId).innerHTML =
+    series.filter(s=>s.name).map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('');
+}
+
+// ---- sections
+async function sectionDT(){
+  const host = document.getElementById('grid_dt'); clear(host);
+  const ks = Object.keys(S.grid[EP]).map(Number).filter(k => !S.grid[EP][k].held_out).sort((a,b)=>a-b);
+  document.getElementById('leg').innerHTML =
+    `<span class="leg"><span style="background:${GT_COL}"></span>ground truth`
+    + `<span style="background:${PR_COL}"></span>model</span>`;
+  let best = null;
+  for (const k of ks){
+    const r = S.grid[EP][k];
+    if (!best || r.ade_mm < best.ade_mm) best = r;
+    await tile(host, r.dir,
+      `<b>${r.dt_ms} ms</b> steps · ${Math.ceil(HORIZON/(2*r.dt_ms))} chunks · ${r.ade_mm} mm`,
+      [{bin:'gt', color:GT_COL, size:0.014}, {bin:'pred', color:PR_COL, size:0.015}]);
+  }
+  document.getElementById('lab_ade').textContent = `best here: ${best.dt_ms} ms at ${best.ade_mm} mm`;
+}
+async function sectionHO(){
+  const host = document.getElementById('grid_ho'); clear(host);
+  const rows = [];
+  for (const trio of [[8,12,16],[24,32,40]])
+    for (const k of trio){
+      const r = S.grid[EP][k]; if (!r) continue;
+      rows.push(r);
+      await tile(host, r.dir,
+        `<b>${r.dt_ms} ms</b> · ${r.ade_mm} mm` + (r.held_out ? ' · <span class="ho">never trained</span>' : ''),
+        [{bin:'gt', color:GT_COL, size:0.014},
+         {bin:'pred', color:r.held_out?HO_COL:PR_COL, size:0.015}], r.held_out);
+    }
+  let h = '<tr><th>step size</th><th>trained</th><th>rollout ADE (mm)</th><th>final error (mm)</th></tr>';
+  for (const r of rows)
+    h += `<tr><td class="k">${r.dt_ms} ms</td><td>${r.held_out?'no':'yes'}</td>`
+       + `<td class="${r.held_out?'ho':''}">${r.ade_mm}</td><td class="${r.held_out?'ho':''}">${r.fde_mm}</td></tr>`;
+  document.getElementById('t_ho').innerHTML = h;
+}
+async function sectionSAMP(){
+  const host = document.getElementById('grid_s'); clear(host);
+  const k = document.getElementById('dt2').value;
+  const r = S.grid[EP2][k]; if (!r) return;
+  const arms = [{bin:'pred', name:'one shot', ade:r.ade_mm, col:PR_COL}]
+    .concat(r.variants.map((v,i) => ({bin:v.name, name:v.name.replace('_',' · '), ade:v.ade_mm, col:ALT[i%3]})));
+  for (const a of arms)
+    await tile(host, r.dir, `<b>${a.name}</b> · ${a.ade} mm`,
+      [{bin:'gt', color:GT_COL, size:0.014}, {bin:a.bin, color:a.col, size:0.015}]);
+  let h = '<tr><th>sampler</th><th>rollout ADE (mm)</th><th>final error (mm)</th></tr>'
+        + `<tr><td class="k">one shot — a single pass at t=999</td><td>${r.ade_mm}</td><td>${r.fde_mm}</td></tr>`;
+  for (const v of r.variants)
+    h += `<tr><td class="k">${v.name.replace(/_/g,' ')}</td><td>${v.ade_mm}</td><td>${v.fde_mm}</td></tr>`;
+  document.getElementById('t_s').innerHTML = h;
+}
+function sectionROLL(){
+  const ks = Object.keys(S.rollouts).map(Number).filter(k=>!S.rollouts[k].held_out).sort((a,b)=>a-b);
+  const C = [css('--s1'),css('--s3'),css('--s4'),css('--s2'),'#8c6d3f','#3b7f7c','#a4436f','#5a6acf'];
+  const series = ks.map((k,i) => ({name: S.rollouts[k].dt_ms+' ms', color: C[i%8],
+    pts: S.rollouts[k].per_frame_mm.map((v,j) => [(j+1)*S.rollouts[k].dt_ms, v])}));
+  logChart('c_roll','l_roll',series,HORIZON,'error (mm)',d=>d<1?d:d.toFixed(0),[0,100,200,300,400]);
+  const at = (r,ms) => { const j = Math.round(ms/r.dt_ms)-1;
+    return (j>=0 && j<r.per_frame_mm.length) ? r.per_frame_mm[j].toFixed(1) : '–'; };
+  let h = '<tr><th>step size</th><th>AR chunks</th><th>100 ms</th><th>200 ms</th><th>300 ms</th>'
+        + '<th>400 ms</th><th>ADE (mm)</th></tr>';
+  for (const k of ks){ const r = S.rollouts[k];
+    h += `<tr><td class="k">${r.dt_ms} ms</td><td>${r.chunks}</td>`
+       + [100,200,300,400].map(t=>`<td>${at(r,t)}</td>`).join('')
+       + `<td data-v="1">${r.ade_mm}</td></tr>`; }
+  const tb = document.getElementById('t_roll'); tb.innerHTML = h; markBest(tb,[6]);
+  document.getElementById('n_stats').textContent = S.n_stats;
+}
+function sectionWIN(){
+  const ks = Object.keys(S.windows).map(Number).sort((a,b)=>a-b);
+  const tr = ks.filter(k=>!S.windows[k].held_out), ho = ks.filter(k=>S.windows[k].held_out);
+  const P = k => [S.windows[k].dt_ms, S.windows[k].ade_mm, S.windows[k].held_out];
+  const Q = k => [S.windows[k].dt_ms, S.windows[k].vel_err_ms*100, S.windows[k].held_out];
+  // power-law fit on the trained rungs only
+  const lx = tr.map(k=>Math.log(S.windows[k].dt_ms)), ly = tr.map(k=>Math.log(S.windows[k].ade_mm));
+  const mx = lx.reduce((a,b)=>a+b)/lx.length, my = ly.reduce((a,b)=>a+b)/ly.length;
+  const slope = lx.reduce((a,x,i)=>a+(x-mx)*(ly[i]-my),0)/lx.reduce((a,x)=>a+(x-mx)**2,0);
+  const c = Math.exp(my - slope*mx);
+  const fit = [2.5,150].map(d => [d, c*Math.pow(d,slope)]);
+  logChart('c_w1','l_w1',[
+    {name:`fit: error ∝ Δt^${slope.toFixed(2)}`, color:'#999', pts:fit, w:1.2, dash:true},
+    {name:'trained', color:css('--s1'), pts:tr.map(P), dots:true},
+    {name:'never trained', color:HO_COL, pts:ho.map(P), dots:true, w:0}],
+    150,'window error (mm)',d=>d<1?d:d.toFixed(0),[2.5,10,40,150],true);
+  logChart('c_w2','l_w2',[
+    {name:'trained', color:css('--s1'), pts:tr.map(Q), dots:true},
+    {name:'never trained', color:HO_COL, pts:ho.map(Q), dots:true, w:0}],
+    150,'error ÷ Δt  (cm/s)',d=>d<1?d:d.toFixed(0),[2.5,10,40,150],true);
+  let h = '<tr><th>step size</th>' + ks.map(k=>`<th${S.windows[k].held_out?' class="ho"':''}>`
+        + `${S.windows[k].dt_ms}</th>`).join('') + '</tr>';
+  h += '<tr><td class="k">window error (mm)</td>' + ks.map(k=>`<td class="${S.windows[k].held_out?'ho':''}">`
+     + `${S.windows[k].ade_mm.toFixed(2)}</td>`).join('') + '</tr>';
+  h += '<tr><td class="k">÷ Δt (cm/s)</td>' + ks.map(k=>`<td class="${S.windows[k].held_out?'ho':''}">`
+     + `${(S.windows[k].vel_err_ms*100).toFixed(2)}</td>`).join('') + '</tr>';
+  document.getElementById('t_win').innerHTML = h;
+}
+
+// ---- boot
+let EP = null, EP2 = null;
+(async function(){
+  S = await (await fetch('data/frsperf/summary.json'+V)).json();
+  const epSel = document.getElementById('ep'), ep2Sel = document.getElementById('ep2');
+  const name = c => { const e = S.episodes.find(x=>x.clip===c);
+    return c.split('_')[0] + ' · ' + e.scenario + (e.pinned ? ' · corner splash' : ''); };
+  for (const e of S.episodes) epSel.add(new Option(name(e.clip), e.clip));
+  for (const c of S.sub_keys) ep2Sel.add(new Option(name(c), c));
+  EP = S.episodes[0].clip; EP2 = S.sub_keys[0];
+  const dt2 = document.getElementById('dt2');
+  for (const d of S.sub_dts_ms) dt2.add(new Option(d + ' ms', String(Math.round(d/2.5))));
+  const sp = document.getElementById('sp');
+  for (const [lab,v] of [['1/4 speed',4],['1/8 speed',8],['1/16 speed',16]]) sp.add(new Option(lab, v));
+  sp.value = String(SPEED);
+  sp.onchange = () => SPEED = +sp.value;
+  epSel.onchange = async () => { EP = epSel.value; await sectionDT(); await sectionHO(); };
+  ep2Sel.onchange = async () => { EP2 = ep2Sel.value; await sectionSAMP(); };
+  dt2.onchange = sectionSAMP;
+
+  sectionROLL(); sectionWIN();
+  addEventListener('resize', () => { sectionROLL(); sectionWIN(); });
+  requestAnimationFrame(loop);
+  await sectionDT(); await sectionHO(); await sectionSAMP();
+})();
+})();
+</script>
+</body>
+</html>
