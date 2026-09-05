@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Hard cases — c5f16 shell rollouts</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
+  .wrap{position:relative; z-index:1; max-width:1440px}
+  .speed{font-size:12px; color:var(--soft); margin:18px 1px 0; letter-spacing:.02em}
+  .speed b{color:var(--ink); font-weight:600}
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:20px; margin:10px 0 28px; cursor:grab}
+  .grid:active{cursor:grabbing}
+  .tile{margin:0}
+  .tile .view{height:460px; border:1px solid var(--line); background:transparent}
+  .tile figcaption{font-size:12px; color:var(--soft); margin:6px 1px 0}
+  .tile figcaption b{color:var(--ink); font-weight:600}
+  @media(max-width:900px){ .grid{grid-template-columns:1fr} .tile .view{height:340px} }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="wrap">
+  <p class="speed" id="lead"></p>
+  <div class="grid" id="grid"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const V = '?t=' + Date.now();
+const GT = '#b9b4ab', PRED = '#d4762c';
+const PCT_MIN = 32;                       // the hard half of the ranked set
+const SPEED = 8;                          // 1/8 speed
+const disc = vizDisc(), clock = makeClock(() => SPEED, 700);
+let tiles = [], last = -1, SPAN = 0;
+
+function arena(H){
+  const s = new THREE.Scene();
+  const g = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); g.position.set(0.5,0,0.5); s.add(g);
+  const P = (a,b,c) => new THREE.Vector3(a,b,c);
+  s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0),P(1,0,0),P(1,0,1),P(0,0,1)]),
+       new THREE.LineBasicMaterial({color:0x444444})));
+  const up = new THREE.LineBasicMaterial({color:0xc4c4c4});
+  for (const [a,c] of [[0,0],[1,0],[1,1],[0,1]])
+    s.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(a,0,c),P(a,H,c)]), up));
+  return s;
+}
+function cloud(scene, col, size, n){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+  const p = new THREE.Points(geo, new THREE.PointsMaterial({size, map:disc, color:col,
+              transparent:true, alphaTest:0.4, sizeAttenuation:true}));
+  p.frustumCulled = false; scene.add(p); return geo;
+}
+function render(){
+  const cr = canvas.getBoundingClientRect(), pr = renderer.getPixelRatio();
+  const w = Math.round(cr.width), h = Math.round(cr.height);
+  if (canvas.width !== Math.floor(w*pr) || canvas.height !== Math.floor(h*pr)) renderer.setSize(w, h, false);
+  renderer.setScissorTest(false); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.setScissorTest(true); renderer.setClearColor(0xfbfaf8, 1);
+  for (const t of tiles){
+    if (!t.scene) continue;
+    const r = t.el.getBoundingClientRect();
+    if (r.bottom < cr.top || r.top > cr.bottom) continue;
+    const vx = r.left - cr.left, vy = cr.bottom - r.bottom;
+    renderer.setViewport(vx, vy, r.width, r.height);
+    renderer.setScissor(vx, vy, r.width, r.height);
+    camera.aspect = r.width/r.height; camera.updateProjectionMatrix();
+    renderer.render(t.scene, camera);
+  }
+  renderer.setScissorTest(false);
+}
+const canvas = document.getElementById('bg');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
+camera.position.set(2.15, 1.2, 2.15);
+const controls = new THREE.OrbitControls(camera, document.body);
+addEventListener('pointerdown', e => { controls.enabled = !!e.target.closest('.view'); }, true);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.enableZoom = false; controls.enablePan = false;
+controls.maxPolarAngle = Math.PI/2 - 0.02; controls.target.set(0.5, 0.25, 0.5);
+
+function loop(ts){
+  controls.update();
+  if (SPAN > 0){
+    const ms = clock.tick(ts, true, SPAN);
+    if (ms !== last){
+      last = ms;
+      for (const t of tiles){
+        if (!t.gtBuf) continue;
+        const f = Math.min(t.m.n_frames - 1, Math.floor(ms / t.m.frame_ms));
+        if (f === t.f) continue;
+        t.f = f;
+        const n = t.m.n_particles, base = f*n*3;
+        t.gGeo.attributes.position.array.set(t.gtBuf.subarray(base, base+n*3));
+        t.pGeo.attributes.position.array.set(t.prBuf.subarray(base, base+n*3));
+        t.gGeo.attributes.position.needsUpdate = true;
+        t.pGeo.attributes.position.needsUpdate = true;
+      }
+    }
+  }
+  render(); requestAnimationFrame(loop);
+}
+const dq = (b, m) => { const u = new Uint16Array(b), f = new Float32Array(u.length);
+  for (let i=0;i<u.length;i++) f[i] = u[i]/65535*m.q_scale + m.q_lo; return f; };
+
+(async function(){
+  const index = (await (await fetch('data/mpm5roll/shell_dt15/index.json'+V)).json())
+                  .filter(e => e.pct >= PCT_MIN);
+  document.getElementById('lead').innerHTML =
+    `The <b>${index.length} hardest of the ranked rollouts</b> (percentile ${PCT_MIN} and worse) from the `
+    + `c5f16 cube+sphere model. Whole episodes from 5 ground-truth frames, 2.5 ms steps, chunks of 16 frames `
+    + `re-anchored on the model's own output, pyramid sampler at 25 steps. Ground truth in grey, model in `
+    + `orange, played at <b>&frac18; speed</b> &middot; drag to rotate`;
+  const grid = document.getElementById('grid');
+  tiles = index.map(e => {
+    const fig = document.createElement('figure'); fig.className = 'tile';
+    fig.innerHTML = `<div class="view"></div><figcaption><b>p${e.pct}</b> &middot; `
+      + `${e.clip.split('_')[0]} ${e.clip.split('_')[3]} ${e.clip.split('_')[4]} &middot; `
+      + `${e.episode_s}s, ${e.chunks} chunks &middot; <b>ADE ${e.ade_mm} mm</b>, final ${e.fde_mm} mm</figcaption>`;
+    grid.appendChild(fig);
+    return {el: fig.querySelector('.view'), e, f: -1};
+  });
+  requestAnimationFrame(loop);
+  await Promise.all(tiles.map(async t => {
+    const d = `data/mpm5roll/shell_dt15/${t.e.name}`;
+    const m = await (await fetch(`${d}/meta.json`+V)).json();
+    const [g, p] = await Promise.all([fetch(`${d}/gt.bin`+V).then(r=>r.arrayBuffer()),
+                                     fetch(`${d}/pred.bin`+V).then(r=>r.arrayBuffer())]);
+    t.m = m; t.gtBuf = dq(g, m); t.prBuf = dq(p, m);
+    t.scene = arena(1.2);
+    t.gGeo = cloud(t.scene, GT, 0.013, m.n_particles);
+    t.pGeo = cloud(t.scene, PRED, 0.014, m.n_particles);
+    SPAN = Math.max(SPAN, (m.n_frames - 1) * m.frame_ms);
+  }));
+})();
+})();
+</script>
+</body>
+</html>
