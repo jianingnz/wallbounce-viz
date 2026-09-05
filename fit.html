@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Train vs held-out — frs1024_c2n2_dt150</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  .wrap{max-width:none}
+  .ttl{font-family:var(--serif); font-size:20px; font-weight:600; margin:30px 0 2px}
+  .ttl:first-child{margin-top:8px}
+  .ttl span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft); letter-spacing:.02em}
+  svg{width:100%; display:block}
+  .g2{display:grid; grid-template-columns:1fr 1fr; gap:16px 26px; margin:12px 0 0}
+  td.k,th:first-child{text-align:left}
+  td.ho,th.ho{color:var(--s2)}
+  .note{font-size:14px; color:#333; margin:14px 0 0; line-height:1.55; max-width:78ch}
+  .note b{font-weight:600}
+  @media(max-width:820px){ .g2{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="ttl">Single window <span>one prediction from 2 GT frames — training episodes vs held-out episodes</span></p>
+  <svg id="c_win" style="height:300px"></svg><div class="leg" id="l_win"></div>
+
+  <p class="ttl">Whole 400 ms rollout <span>same protocol on both splits, 60 episodes each</span></p>
+  <svg id="c_roll" style="height:300px"></svg><div class="leg" id="l_roll"></div>
+
+  <p class="ttl">Numbers <span>ratio &gt; 1 means the model does worse on episodes it never saw</span></p>
+  <table id="t"></table>
+  <p class="note" id="verdict"></p>
+</div>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const V = '?t=' + Date.now(), HO = '#c0392b';
+
+function chart(id, legId, series, ylab){
+  const svg = document.getElementById(id), W = Math.max(svg.clientWidth, 340);
+  const H = svg.clientHeight || 300, L = 66, R = 18, Tp = 12, B = 30;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const vals = series.flatMap(s => s.pts.map(p => p[1])).filter(v => v > 0);
+  const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
+  const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+  const X = d => L+(W-L-R)*(Math.log10(d)-Math.log10(2.5))/(Math.log10(150)-Math.log10(2.5));
+  const Y = v => Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+  let g = '';
+  for (let d=lo; d<=hi*1.0001; d*=10)
+    g += `<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/>`
+       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+  for (const d of [2.5,5,10,20,40,60,100,150])
+    g += `<text x="${X(d)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${d}</text>`;
+  g += `<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" text-anchor="middle"
+        transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})">${ylab}</text>`;
+  for (const s of series){
+    const tr = s.pts.filter(p => !p[2]);
+    g += `<path d="${tr.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}"
+           fill="none" stroke="${s.color}" stroke-width="2" ${s.dash?'stroke-dasharray="5 4"':''}/>`;
+    for (const p of s.pts)
+      g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${p[2]?5:3.6}" fill="${p[2]?HO:s.color}"
+             ${s.dash?`stroke="#fff" stroke-width="1.2"`:''}/>`;
+  }
+  svg.innerHTML = g;
+  document.getElementById(legId).innerHTML =
+    series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('')
+    + `<span style="background:${HO}"></span>step size never trained on`;
+}
+
+Promise.all([
+  fetch('data/frsperf_train/summary.json'+V).then(r=>r.json()),
+  fetch('data/frsperf/summary.json'+V).then(r=>r.json()),
+]).then(([TR, VA]) => {
+  const ks = Object.keys(VA.windows).map(Number).sort((a,b)=>a-b);
+  const P = (D,g) => ks.filter(k=>D[g][k]).map(k => [D[g][k].dt_ms, D[g][k].ade_mm, D[g][k].held_out]);
+  const draw = () => {
+    chart('c_win','l_win',[
+      {name:'training episodes', color:css('--s3'), pts:P(TR,'windows'), dash:true},
+      {name:'held-out episodes', color:css('--s1'), pts:P(VA,'windows')}], 'window error (mm)');
+    chart('c_roll','l_roll',[
+      {name:'training episodes', color:css('--s3'), pts:P(TR,'rollouts'), dash:true},
+      {name:'held-out episodes', color:css('--s1'), pts:P(VA,'rollouts')}], 'rollout error (mm)');
+  };
+  draw(); addEventListener('resize', draw);
+
+  const row = (lab, get) => {
+    let h = `<tr><td class="k">${lab}</td>`;
+    for (const k of ks) h += `<td class="${VA.windows[k].held_out?'ho':''}">${get(k)}</td>`;
+    return h + '</tr>';
+  };
+  let h = '<tr><th>step size</th>' + ks.map(k =>
+      `<th class="${VA.windows[k].held_out?'ho':''}">${VA.windows[k].dt_ms}${VA.windows[k].held_out?' †':''}</th>`
+    ).join('') + '</tr>';
+  h += row('window · train', k => TR.windows[k].ade_mm.toFixed(2));
+  h += row('window · held out', k => VA.windows[k].ade_mm.toFixed(2));
+  h += row('ratio', k => (VA.windows[k].ade_mm/TR.windows[k].ade_mm).toFixed(2));
+  h += row('rollout · train', k => TR.rollouts[k] ? TR.rollouts[k].ade_mm.toFixed(1) : '–');
+  h += row('rollout · held out', k => VA.rollouts[k] ? VA.rollouts[k].ade_mm.toFixed(1) : '–');
+  h += row('ratio', k => (TR.rollouts[k] && VA.rollouts[k])
+        ? (VA.rollouts[k].ade_mm/TR.rollouts[k].ade_mm).toFixed(2) : '–');
+  document.getElementById('t').innerHTML = h;
+
+  const tr = ks.filter(k=>!VA.windows[k].held_out), ho = ks.filter(k=>VA.windows[k].held_out);
+  const mean = a => a.reduce((x,y)=>x+y,0)/a.length;
+  const gap = (D,g) => mean(tr.filter(k=>D[g][k]).map(k=>D[g][k].ade_mm));
+  // penalty for an UNSEEN RATE, measured separately on each split: the held-out
+  // rung against the mean of the two trained rungs on either side of it
+  const nb = {12:[8,16], 32:[24,40]};
+  const unseen = (D,g) => mean(ho.filter(k=>D[g][k] && nb[k].every(j=>D[g][j]))
+    .map(k => D[g][k].ade_mm / mean(nb[k].map(j=>D[g][j].ade_mm))));
+  const rW = gap(VA,'windows')/gap(TR,'windows'), rR = gap(VA,'rollouts')/gap(TR,'rollouts');
+  document.getElementById('verdict').innerHTML =
+    `<b>Episodes it never saw cost almost nothing.</b> Averaged over the trained step sizes, error on held-out `
+    + `episodes is ${rW.toFixed(2)}× the training-episode error on a single window and ${rR.toFixed(2)}× over a `
+    + `full rollout — within a few percent of 1 in both directions, which is the spread you get between any two `
+    + `samples of ${TR.n_stats} episodes. After ~1 epoch there is nothing to memorize, and the numbers agree.`
+    + `<br><br><b>Step sizes it never saw cost a lot — on both splits equally.</b> Measured against the mean of `
+    + `the two trained rungs on either side, an unseen rate costs `
+    + `${unseen(TR,'windows').toFixed(2)}× on training episodes and ${unseen(VA,'windows').toFixed(2)}× on `
+    + `held-out ones for a single window; ${unseen(TR,'rollouts').toFixed(2)}× and `
+    + `${unseen(VA,'rollouts').toFixed(2)}× over a full rollout. The penalty is the same whether or not the `
+    + `episode was in the training set, so this is not the model failing to generalize to new scenes — it is `
+    + `the model never having learned a continuous function of Δt. Δt was drawn from eight discrete rungs and `
+    + `that is what it fit.`
+    + `<br><br>${TR.n_stats} episodes per split, identical anchors and protocol, checkpoint ${TR.ckpt} at step `
+    + `${TR.step.toLocaleString()}. † never trained.`;
+});
+})();
+</script>
+</body>
+</html>
