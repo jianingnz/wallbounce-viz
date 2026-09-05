@@ -8,27 +8,26 @@
 <link rel="stylesheet" href="site.css?v=20260902">
 <style>
   .wrap{max-width:1080px}
-  .charts{display:grid; grid-template-columns:1fr 1fr; gap:22px 26px; margin:26px 0 0}
-  .charts .full{grid-column:1 / -1}
+  .charts{margin:26px 0 0}
+  .charts > div{margin:0 0 26px}
   svg{width:100%; display:block}
-  .lab{font-size:12px; color:var(--soft); margin:2px 0 0; letter-spacing:.02em}
-  .lab b{color:var(--ink); font-weight:600}
+  .ttl{font-family:var(--serif); font-size:19px; font-weight:600; margin:0 0 2px}
+  .ttl span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft); letter-spacing:.02em}
   table{margin-top:26px}
   td.def{text-align:left; font-size:13px; color:#333; line-height:1.45}
   td.k{text-align:left; white-space:nowrap; font-weight:600}
   .sw{display:inline-block; width:14px; height:3px; vertical-align:middle; margin-right:7px}
-  @media(max-width:820px){ .charts{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="charts">
-    <div><svg id="c_obj" style="height:250px"></svg><div class="leg" id="l_obj"></div>
-      <p class="lab">Training objective — MSE on the predicted velocity, normalizer units</p></div>
-    <div><svg id="c_phys" style="height:250px"></svg><div class="leg" id="l_phys"></div>
-      <p class="lab">Same error in physical units — RMS velocity error, cm/s</p></div>
-    <div class="full"><svg id="c_lr" style="height:130px"></svg>
-      <p class="lab">Learning rate — wsd: 5% warmup, stable at 1e-4, final 10% decayed to zero</p></div>
+    <div><p class="ttl">Training objective <span>MSE on the predicted velocity, normalizer units</span></p>
+      <svg id="c_obj" style="height:260px"></svg><div class="leg" id="l_obj"></div></div>
+    <div><p class="ttl">Velocity error <span>the same error before normalization, cm/s</span></p>
+      <svg id="c_phys" style="height:260px"></svg><div class="leg" id="l_phys"></div></div>
+    <div><p class="ttl">Learning rate <span>wsd: 5% warmup, stable at 1e-4, final 10% decayed to zero</span></p>
+      <svg id="c_lr" style="height:140px"></svg></div>
   </div>
   <table id="t_def"></table>
   <table id="t_fin"></table>
@@ -107,12 +106,13 @@ fetch('data/losses_frs.json?t=' + Date.now()).then(r => r.json()).then(D => {
 
   const sw = c => `<span class="sw" style="background:${css(c)}"></span>`;
   document.getElementById('t_def').innerHTML =
-    '<tr><th>curve</th><th>what it measures</th></tr>' + [
-    [sw('--s1') + 'train', 'Mean squared error between the velocity sequence the model predicts and the ground-truth velocity sequence, in normalizer units. Averaged over the 2 predicted frames × 1024 particles × 3 axes. Under diffusion forcing every frame carries its own noise level, so one batch scores the model at many noise levels at once.'],
-    [sw('--s2') + 'val', 'The same quantity on the held-out validation split (500 episodes, never trained on).'],
-    ['EMA weights', 'The same validation batch scored with the exponential moving average of the weights (decay 0.9999) — these are the weights that get exported and evaluated, and they score consistently below the live ones.'],
-    ['RMS error', 'The identical error before normalization: √(x₀ MSE) in raw units. The model predicts velocity in m/s, so this reads directly as how far off the per-particle velocity is, in cm/s.'],
-    ['dt sampled', 'One dt per window, drawn uniformly from ' + M.dt_ladder_ms.join(', ') + ' ms; ' + M.held_out_ms.join(' and ') + ' ms are deliberately never trained.'],
+    '<tr><th>curve</th><th>what it is</th></tr>' + [
+    [sw('--s1') + 'train', 'error against the ground-truth velocity, training split'],
+    [sw('--s2') + 'val', 'the same, on 500 held-out episodes'],
+    ['EMA weights', 'scored with the EMA-averaged weights (0.9999) — the ones we export'],
+    ['velocity error', '\u221A(x\u2080 MSE) in raw units: how far off the per-particle velocity is'],
+    ['dt sampled', 'one per window from ' + M.dt_ladder_ms.join(', ') + ' ms; '
+      + M.held_out_ms.join(' and ') + ' ms never trained'],
   ].map(r => `<tr><td class="k">${r[0]}</td><td class="def">${r[1]}</td></tr>`).join('');
 
   const last = k => D[k][D[k].length - 1][1];
