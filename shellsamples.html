@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>What one training sample looks like</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
+  .wrap{position:relative; z-index:1; max-width:1440px}
+  .speed{font-size:12px; color:var(--soft); margin:18px 1px 0; letter-spacing:.02em}
+  .speed b{color:var(--ink); font-weight:600}
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:20px; margin:10px 0 28px; cursor:grab}
+  .grid:active{cursor:grabbing}
+  .tile{margin:0}
+  .tile .view{height:460px; border:1px solid var(--line); background:transparent}
+  .tile figcaption{font-size:12px; color:var(--soft); margin:6px 1px 0}
+  .tile figcaption b{color:var(--ink); font-weight:600}
+  @media(max-width:900px){ .grid{grid-template-columns:1fr} .tile .view{height:340px} }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="wrap">
+  <p class="speed">One training sample: <b>5 context frames</b> (grey) that the model is given, then <b>16 future frames</b> (coloured) it has to predict. Every tile steps through its 21 frames at the same rate, so what changes between tiles is how much physics one sample covers &middot; drag to rotate</p>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+  const CUBE = '#c07a4a', SPHERE = '#5b86a8', CTX = '#9aa0a6';
+  const disc = vizDisc();
+  const v = '?t=' + Date.now();
+  let tiles = [];
+
+  function arena(H){
+    const s = new THREE.Scene();
+    const g = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); g.position.set(0.5, 0, 0.5); s.add(g);
+    const P = (a, b, c) => new THREE.Vector3(a, b, c);
+    s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0), P(1,0,0), P(1,0,1), P(0,0,1)]),
+         new THREE.LineBasicMaterial({color: 0x444444})));
+    const up = new THREE.LineBasicMaterial({color: 0xc0c0c0});
+    for (const [a, c] of [[0,0],[1,0],[1,1],[0,1]])
+      s.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(a,0,c), P(a,H,c)]), up));
+    s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,H,0), P(1,H,0), P(1,H,1), P(0,H,1)]),
+         new THREE.LineBasicMaterial({color: 0xd8d8d8})));
+    return s;
+  }
+  function cloud(scene, col, size){
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+    const p = new THREE.Points(geo, new THREE.PointsMaterial({size, map: disc, color: col,
+                transparent: true, alphaTest: 0.4, sizeAttenuation: true}));
+    p.frustumCulled = false; scene.add(p); return geo;
+  }
+
+  const canvas = document.getElementById('bg');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
+  camera.position.set(2.15, 1.2, 2.15);
+  const controls = new THREE.OrbitControls(camera, document.getElementById('grid'));
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.enableZoom = false; controls.enablePan = false;
+  controls.maxPolarAngle = Math.PI / 2 - 0.02;
+  controls.target.set(0.5, 0.25, 0.5);
+
+  function render(){
+    const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+    if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)) renderer.setSize(w, h, false);
+    renderer.setScissorTest(false);
+    renderer.setClearColor(0x000000, 0); renderer.clear();
+    renderer.setScissorTest(true);
+    renderer.setClearColor(0xfbfaf8, 1);
+    for (const t of tiles){
+      if (!t.scene) continue;
+      const r = t.el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight) continue;
+      renderer.setViewport(r.left, innerHeight - r.bottom, r.width, r.height);
+      renderer.setScissor(r.left, innerHeight - r.bottom, r.width, r.height);
+      camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+      renderer.render(t.scene, camera);
+    }
+    renderer.setScissorTest(false);
+  }
+  async function bins(dir, m){
+    const raw = new Uint16Array(await (await fetch(`data/shellsamples/${dir}/pos.bin` + v)).arrayBuffer());
+    const out = new Float32Array(raw.length), lo = m.q_lo, sc = m.q_scale / 65535;
+    for (let i = 0; i < raw.length; i++) out[i] = lo + raw[i] * sc;
+    return out;
+  }
+  const colOf = o => o === 'cube' ? CUBE : SPHERE;
+
+  const FPS = 6;                                     // same frame rate for every tile
+  let frame = -1;
+
+  function setFrame(f){
+    frame = f;
+    for (const t of tiles){
+      if (!t.data) continue;
+      const n = t.m.n_particles, isCtx = f < t.m.context_len;
+      const src = t.data.subarray(f * n * 3, f * n * 3 + n * 3);
+      t.ctx.attributes.position.array.set(isCtx ? src : new Float32Array(n * 3).fill(-99));
+      t.fut.attributes.position.array.set(isCtx ? new Float32Array(n * 3).fill(-99) : src);
+      t.ctx.attributes.position.needsUpdate = true;
+      t.fut.attributes.position.needsUpdate = true;
+    }
+  }
+  function loop(ts){
+    controls.update();
+    const N = 21;
+    const f = Math.floor(ts / 1000 * FPS) % (N + 3);   // 3 frames of hold at the end
+    if (Math.min(f, N - 1) !== frame) setFrame(Math.min(f, N - 1));
+    render(); requestAnimationFrame(loop);
+  }
+  (async function(){
+    const index = await (await fetch('data/shellsamples/index.json' + v)).json();
+    const grid = document.getElementById('grid');
+    index.sort((a, b) => a.object.localeCompare(b.object) || a.stem.localeCompare(b.stem) || a.dt_ms - b.dt_ms);
+    tiles = index.map(e => {
+      const fig = document.createElement('figure'); fig.className = 'tile';
+      fig.innerHTML = `<div class="view"></div><figcaption><b>${e.dt_ms} ms</b> between frames`
+        + ` &middot; ${e.object} &middot; ${e.scenario}`
+        + ` &middot; 5 + 16 frames spanning <b>${e.span_ms} ms</b></figcaption>`;
+      grid.appendChild(fig);
+      return {el: fig.querySelector('.view'), e};
+    });
+    requestAnimationFrame(loop);
+    await Promise.all(tiles.map(async t => {
+      const m = await (await fetch(`data/shellsamples/${t.e.dir}/meta.json` + v)).json();
+      t.m = m; t.data = await bins(t.e.dir, m);
+      t.scene = arena(m.arena.wall_height);
+      t.ctx = cloud(t.scene, CTX, 0.013);
+      t.fut = cloud(t.scene, colOf(t.e.object), 0.013);
+      for (const g of [t.ctx, t.fut])
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(m.n_particles * 3), 3));
+      setFrame(Math.max(frame, 0));
+    }));
+  })();
+
+})();
+</script>
+</body>
+</html>

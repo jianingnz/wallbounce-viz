@@ -1,0 +1,1 @@
+{"stem": "ep_01456_shell2048_cube_drop", "object": "cube", "scenario": "drop", "n_frames": 120, "n_particles": 2048, "dt": 0.01, "height": 0.617, "speed0": 0.77, "contact_ms": 295.0, "dt_sim": 0.0025, "stride": 4, "q_lo": 0.01197868399322033, "q_scale": 0.7244473714381456, "arena": {"size": 1.0, "wall_height": 1.2}}

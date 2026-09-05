@@ -1,0 +1,1 @@
+{"stem": "ep_00812_shell2048_sphere_slam", "object": "sphere", "scenario": "slam", "n_frames": 120, "n_particles": 2048, "dt": 0.01, "height": 0.6992, "speed0": 5.98, "contact_ms": 92.5, "dt_sim": 0.0025, "stride": 4, "q_lo": 0.011527767404913902, "q_scale": 0.9715622160583735, "arena": {"size": 1.0, "wall_height": 1.2}}

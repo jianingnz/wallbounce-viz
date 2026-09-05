@@ -1,0 +1,1 @@
+{"dir": "ep_00031_shell2048_cube_wall_s4", "stem": "ep_00031_shell2048_cube_wall", "object": "cube", "scenario": "wall", "dt_ms": 10.0, "context_len": 5, "future_len": 16, "n_frames": 21, "n_particles": 2048, "span_ms": 200.0, "start_ms": 0.0, "contact_ms": 5.0, "q_lo": 0.014859242364764214, "q_scale": 0.9729834962636232, "arena": {"size": 1.0, "wall_height": 1.2}}

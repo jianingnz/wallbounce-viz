@@ -1,0 +1,1 @@
+{"stem": "ep_01148_shell2048_sphere_drop", "object": "sphere", "scenario": "drop", "n_frames": 92, "n_particles": 2048, "dt": 0.01, "height": 0.362, "speed0": 0.25, "contact_ms": 220.0, "dt_sim": 0.0025, "stride": 4, "q_lo": 0.011996809393167496, "q_scale": 0.673510130494833, "arena": {"size": 1.0, "wall_height": 1.2}}

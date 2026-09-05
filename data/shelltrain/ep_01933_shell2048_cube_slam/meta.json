@@ -1,0 +1,1 @@
+{"stem": "ep_01933_shell2048_cube_slam", "object": "cube", "scenario": "slam", "n_frames": 120, "n_particles": 2048, "dt": 0.01, "height": 0.8003, "speed0": 4.31, "contact_ms": 132.5, "dt_sim": 0.0025, "stride": 4, "q_lo": 0.015531918033957481, "q_scale": 0.9694228563457727, "arena": {"size": 1.0, "wall_height": 1.2}}

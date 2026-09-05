@@ -1,0 +1,1 @@
+{"dir": "ep_02204_shell2048_sphere_wall_s1", "stem": "ep_02204_shell2048_sphere_wall", "object": "sphere", "scenario": "wall", "dt_ms": 2.5, "context_len": 5, "future_len": 16, "n_frames": 21, "n_particles": 2048, "span_ms": 50.0, "start_ms": 70.0, "contact_ms": 92.5, "q_lo": 0.5029755234718323, "q_scale": 0.4849048852920532, "arena": {"size": 1.0, "wall_height": 1.2}}
