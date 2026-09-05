@@ -70,8 +70,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
 camera.position.set(2.05, 1.25, 2.05);
 const controls = new THREE.OrbitControls(camera, document.body);
-addEventListener('pointerdown', e => { controls.enabled = !e.target.closest('select, table, a'); }, true);
-addEventListener('pointerup', () => { controls.enabled = true; }, true);
+addEventListener('pointerdown', e => { controls.enabled = !!e.target.closest('.view'); }, true);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
 controls.enableZoom = false; controls.enablePan = false;
 controls.maxPolarAngle = Math.PI/2 - 0.02; controls.target.set(0.5, 0.28, 0.5);
@@ -95,15 +94,17 @@ function cloud(scene, col, size){
   p.frustumCulled = false; scene.add(p); return geo;
 }
 function render(){
-  const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+  const cr = canvas.getBoundingClientRect(), pr = renderer.getPixelRatio();
+    const w = Math.round(cr.width), h = Math.round(cr.height);
   if (canvas.width !== Math.floor(w*pr) || canvas.height !== Math.floor(h*pr)) renderer.setSize(w, h, false);
   renderer.setScissorTest(false); renderer.setClearColor(0x000000, 0); renderer.clear();
   renderer.setScissorTest(true); renderer.setClearColor(0xfbfaf8, 1);
   for (const t of tiles){
     const r = t.el.getBoundingClientRect();
-    if (r.bottom < 0 || r.top > innerHeight) continue;
-    renderer.setViewport(r.left, innerHeight-r.bottom, r.width, r.height);
-    renderer.setScissor(r.left, innerHeight-r.bottom, r.width, r.height);
+    if (r.bottom < cr.top || r.top > cr.bottom) continue;
+    const vx = r.left - cr.left, vy = cr.bottom - r.bottom;
+    renderer.setViewport(vx, vy, r.width, r.height);
+    renderer.setScissor(vx, vy, r.width, r.height);
     camera.aspect = r.width/r.height; camera.updateProjectionMatrix();
     renderer.render(t.scene, camera);
   }
