@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Training losses — frs1024_c2n2_dt150</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  .wrap{max-width:1080px}
+  .charts{display:grid; grid-template-columns:1fr 1fr; gap:22px 26px; margin:26px 0 0}
+  .charts .full{grid-column:1 / -1}
+  svg{width:100%; display:block}
+  .lab{font-size:12px; color:var(--soft); margin:2px 0 0; letter-spacing:.02em}
+  .lab b{color:var(--ink); font-weight:600}
+  table{margin-top:26px}
+  td.def{text-align:left; font-size:13px; color:#333; line-height:1.45}
+  td.k{text-align:left; white-space:nowrap; font-weight:600}
+  .sw{display:inline-block; width:14px; height:3px; vertical-align:middle; margin-right:7px}
+  @media(max-width:820px){ .charts{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="charts">
+    <div><svg id="c_obj" style="height:250px"></svg><div class="leg" id="l_obj"></div>
+      <p class="lab">Training objective — MSE on the predicted velocity, normalizer units</p></div>
+    <div><svg id="c_phys" style="height:250px"></svg><div class="leg" id="l_phys"></div>
+      <p class="lab">Same error in physical units — RMS velocity error, cm/s</p></div>
+    <div class="full"><svg id="c_lr" style="height:130px"></svg>
+      <p class="lab">Learning rate — wsd: 5% warmup, stable at 1e-4, final 10% decayed to zero</p></div>
+  </div>
+  <table id="t_def"></table>
+  <table id="t_fin"></table>
+</div>
+
+<script>
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (v, n) => v.toLocaleString(undefined, {maximumFractionDigits: n, minimumFractionDigits: n});
+
+// log-y line chart; `mark` draws a labelled vertical rule (the decay boundary)
+function logChart(id, legId, series, xmax, ylab, tick, mark){
+  const svg = document.getElementById(id), W = Math.max(svg.clientWidth, 340);
+  const H = svg.clientHeight || 250, L = 62, R = 14, Tp = 10, B = 26;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const vals = series.flatMap(s => s.pts.map(p => p[1])).filter(v => v > 0);
+  if (!vals.length){ svg.innerHTML = ''; return; }
+  const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
+  const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+  const X = s => L + (W - L - R) * s / xmax;
+  const Y = v => Tp + (H - Tp - B) * (1 - (Math.log10(Math.max(v, lo)) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)));
+  let g = '';
+  for (let d = lo; d <= hi * 1.0001; d *= 10)
+    g += `<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/>`
+       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${tick(d)}</text>`;
+  for (const f of [0, .25, .5, .75, 1])
+    g += `<text x="${X(f*xmax)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
+  g += `<text x="13" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" text-anchor="middle"
+        transform="rotate(-90 13 ${Tp+(H-Tp-B)/2})">${ylab}</text>`;
+  if (mark)
+    g += `<line x1="${X(mark)}" y1="${Tp}" x2="${X(mark)}" y2="${H-B}" stroke="#999" stroke-dasharray="3 3"/>`
+       + `<text x="${X(mark)-5}" y="${Tp+11}" text-anchor="end" font-size="10.5" fill="#888">decay</text>`;
+  for (const s of series)
+    g += `<path d="${s.pts.map((p,i) => (i?'L':'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('')}"
+           fill="none" stroke="${s.color}" stroke-width="${s.w||1.7}" opacity="${s.o||1}"/>`;
+  svg.innerHTML = g;
+  if (legId) document.getElementById(legId).innerHTML =
+    series.map(s => `<span style="background:${s.color}"></span>${s.name}`).join('');
+}
+
+function linChart(id, pts, xmax){
+  const svg = document.getElementById(id), W = Math.max(svg.clientWidth, 340);
+  const H = svg.clientHeight || 130, L = 62, R = 14, Tp = 10, B = 26;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const hi = Math.max(...pts.map(p => p[1]));
+  const X = s => L + (W - L - R) * s / xmax, Y = v => Tp + (H - Tp - B) * (1 - v / hi);
+  let g = '';
+  for (const f of [0, .5, 1])
+    g += `<line x1="${L}" y1="${Y(f*hi)}" x2="${W-R}" y2="${Y(f*hi)}" stroke="${css('--line')}"/>`
+       + `<text x="${L-7}" y="${Y(f*hi)+4}" text-anchor="end" font-size="11" fill="#666">${(f*hi).toExponential(0)}</text>`;
+  for (const f of [0, .25, .5, .75, 1])
+    g += `<text x="${X(f*xmax)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
+  g += `<path d="${pts.map((p,i) => (i?'L':'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('')}"
+        fill="none" stroke="${css('--s4')}" stroke-width="1.7"/>`;
+  svg.innerHTML = g;
+}
+
+fetch('data/losses_frs.json?t=' + Date.now()).then(r => r.json()).then(D => {
+  const M = D.meta, xmax = M.steps;
+  const rms = pts => pts.map(p => [p[0], Math.sqrt(p[1]) * 100]);      // (m/s)^2 -> cm/s
+  const peak = Math.max(...D.train_lr.map(p => p[1]));
+  const decay = (D.train_lr.find(p => p[1] < peak * 0.999 && p[0] > xmax / 2) || [null])[0];
+
+  const S1 = [{name: 'train', color: css('--s1'), pts: D.train_loss, w: 1.1, o: .55},
+              {name: 'train · EMA weights', color: css('--s3'), pts: D.train_loss_ema},
+              {name: 'val', color: css('--s2'), pts: D.val_loss, w: 1.1, o: .55},
+              {name: 'val · EMA weights', color: css('--s4'), pts: D.val_loss_ema}];
+  const S2 = [{name: 'train', color: css('--s1'), pts: rms(D.train_x0_mse_raw), w: 1.1, o: .55},
+              {name: 'val', color: css('--s2'), pts: rms(D.val_x0_mse_raw), w: 1.1, o: .55},
+              {name: 'val · EMA weights', color: css('--s4'), pts: rms(D.val_x0_mse_raw_ema)}];
+  const draw = () => {
+    logChart('c_obj', 'l_obj', S1, xmax, 'MSE (normalized)', d => d.toExponential(0), decay);
+    logChart('c_phys', 'l_phys', S2, xmax, 'RMS error (cm/s)', d => d < 1 ? d : d.toFixed(0), decay);
+    linChart('c_lr', D.train_lr, xmax);
+  };
+  draw(); addEventListener('resize', draw);
+
+  const sw = c => `<span class="sw" style="background:${css(c)}"></span>`;
+  document.getElementById('t_def').innerHTML =
+    '<tr><th>curve</th><th>what it measures</th></tr>' + [
+    [sw('--s1') + 'train', 'Mean squared error between the velocity sequence the model predicts and the ground-truth velocity sequence, in normalizer units. Averaged over the 2 predicted frames × 1024 particles × 3 axes. Under diffusion forcing every frame carries its own noise level, so one batch scores the model at many noise levels at once.'],
+    [sw('--s2') + 'val', 'The same quantity on the held-out validation split (500 episodes, never trained on).'],
+    ['EMA weights', 'The same validation batch scored with the exponential moving average of the weights (decay 0.9999) — these are the weights that get exported and evaluated, and they score consistently below the live ones.'],
+    ['RMS error', 'The identical error before normalization: √(x₀ MSE) in raw units. The model predicts velocity in m/s, so this reads directly as how far off the per-particle velocity is, in cm/s.'],
+    ['dt sampled', 'One dt per window, drawn uniformly from ' + M.dt_ladder_ms.join(', ') + ' ms; ' + M.held_out_ms.join(' and ') + ' ms are deliberately never trained.'],
+  ].map(r => `<tr><td class="k">${r[0]}</td><td class="def">${r[1]}</td></tr>`).join('');
+
+  const last = k => D[k][D[k].length - 1][1];
+  const best = D.val_loss_ema.reduce((a, b) => b[1] < a[1] ? b : a);
+  document.getElementById('t_fin').innerHTML =
+    '<tr><th>final</th><th>value</th><th>step</th></tr>' + [
+    ['train loss', last('train_loss').toExponential(2), xmax],
+    ['val loss', last('val_loss').toExponential(2), D.val_loss.at(-1)[0]],
+    ['val loss, EMA weights', last('val_loss_ema').toExponential(2), D.val_loss_ema.at(-1)[0]],
+    ['best val loss, EMA weights', best[1].toExponential(2), best[0]],
+    ['val RMS velocity error', fmt(Math.sqrt(last('val_x0_mse_raw_ema')) * 100, 2) + ' cm/s', D.val_x0_mse_raw_ema.at(-1)[0]],
+    ['windows seen', fmt(xmax * M.batch_size / 1e6, 1) + ' M', xmax],
+  ].map(r => `<tr><td class="k">${r[0]}</td><td>${r[1]}</td><td>${fmt(r[2], 0)}</td></tr>`).join('');
+});
+</script>
+</body>
+</html>
