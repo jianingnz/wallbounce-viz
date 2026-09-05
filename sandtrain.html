@@ -9,77 +9,23 @@
 <style>
   #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
   .wrap{position:relative; z-index:1}
-  .stats{display:flex; flex-wrap:wrap; gap:0; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); margin:16px 0 4px}
-  .stats div{flex:1 1 130px; padding:10px 14px 11px; border-right:1px solid var(--line)}
-  .stats div:last-child{border-right:0}
-  .stats b{display:block; font-family:var(--serif); font-size:25px; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums}
-  .stats span{font-size:11.5px; color:var(--soft); letter-spacing:.05em; text-transform:uppercase}
-  .grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px 14px; margin:10px 0 4px}
-  .tile{margin:0; cursor:pointer}
-  .tile .view{height:190px; border:1px solid var(--line); background:transparent; position:relative}
-  .tile.on .view{border-color:var(--ink)}
-  .tile.big{grid-column:1/-1}
-  .tile.big .view{height:520px}
-  .tile figcaption{font-size:12px; color:var(--soft); margin:5px 1px 0; line-height:1.35}
-  .tile figcaption b{color:var(--ink); font-weight:600; font-size:12.5px}
-  .tile .tag{font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--soft)}
-  .ctl{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0 2px}
-  .ctl input[type=range]{flex:1 1 220px; accent-color:var(--ink); min-width:160px}
-  .chart{margin:6px 0 2px}
-  .chart svg{display:block; width:100%; height:auto; overflow:visible}
-  .lg{display:flex; gap:16px; align-items:center; font-size:12.5px; color:var(--soft); margin:2px 0 0}
-  .lg i{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:0}
-  table.ep td:first-child, table.ep th:first-child{text-align:left}
-  table.ep tr.on td{background:#f0ece2}
-  table.ep tbody tr{cursor:pointer}
-  table.ep tbody tr:hover td{background:#f6f3ec}
-  @media(max-width:900px){ .grid{grid-template-columns:repeat(2,1fr)} .tile .view{height:170px} }
+  .grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:18px 0 6px; cursor:grab}
+  .grid:active{cursor:grabbing}
+  .tile{margin:0}
+  .tile .view{height:210px; border:1px solid var(--line); background:transparent}
+  .tile figcaption{font-size:12px; color:var(--soft); margin:6px 1px 0}
+  .tile figcaption b{color:var(--ink); font-weight:600}
+  @media(max-width:900px){ .grid{grid-template-columns:repeat(2,1fr)} .tile .view{height:180px} }
 </style>
 </head>
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
   <h1>What the model is trained on</h1>
-  <p class="sub">Ten thousand simulated episodes of a sphere of sand thrown into a walled box. Each episode records
-  1,024 material points for 1.2 seconds at 2.5 ms per frame — the point cloud below <em>is</em> the training signal,
-  frame by frame. Twelve episodes are shown, chosen to span the range of launches the model sees.</p>
-
-  <div class="stats" id="stats"></div>
-  <p class="caption" id="dsline"></p>
-
-  <h2>Coverage of the training set</h2>
-  <p>Every episode draws a scenario — <b>drop</b>, <b>wall</b> or <b>slam</b> — then a random position, orientation,
-  launch velocity and spin. Each panel below is one scenario, plotted against the two things that scenario actually
-  varies: its launch strength and its initial spin. The pale cloud is all 10,000 training episodes; the dark circles
-  are the twelve shown here.</p>
-  <div class="chart" id="chart"></div>
-  <div class="lg"><span><i style="background:#b9b4ab"></i>all 10,000 training episodes</span><span><i style="background:#1a5c86"></i>the twelve below</span></div>
-  <p class="caption">The vertical axis differs by scenario because the scenarios sample different things: a drop is
-  released at rest, so its energy is the height it falls from, while a wall throw and a slam are defined by their launch
-  speed. Spin is uniform on 0–12 rad/s about a random axis in all three. The twelve sit at the corners of each panel by
-  design — the extremes of gentle/energetic and slow/fast spin — so the set spans the box rather than sampling its
-  middle twelve times.</p>
-
-  <h2>Twelve episodes, same clock</h2>
-  <p>All twelve play in lockstep on physical time and share one camera — drag anywhere in the grid to orbit them
-  together. Click a panel to enlarge it.</p>
-  <div class="ctl">
-    <button class="play">Pause</button><button class="replay">Replay</button>
-    <input type="range" id="scrub" min="0" max="1" value="0" step="1"><span class="mono" id="frame"></span>
-  </div>
+  <p class="sub">Twelve of the 10,000 sand simulations the model learns from — a sphere of sand dropped, thrown at a
+  wall, or slammed into the floor of a 1 m box. Each shows all 1,024 tracked points over 1.2 seconds, looping.
+  Drag to rotate.</p>
   <div class="grid" id="grid"></div>
-  <p class="caption">Sand is drawn at 1,024 points, the same subsample the model is trained on; the box is 1 m across,
-  the floor grid 10 cm. Every fourth simulator frame is shown (10 ms apart), so playback is smooth without loading
-  every step.</p>
-
-  <h2>The twelve</h2>
-  <table class="ep" id="tbl"><thead><tr>
-    <th>episode</th><th>scenario</th><th>height</th><th>launch speed</th><th>spin</th>
-    <th>hits floor</th><th>settles</th><th>final spread</th>
-  </tr></thead><tbody></tbody></table>
-  <p class="caption">Height, speed and spin are the launch conditions. “Hits floor” and “settles” are the frames where
-  the first point reaches the floor and where motion drops below 5 cm/s; “final spread” is the width of the sand at
-  1.2 s (90th-percentile diameter about its centre). Together they show how differently these episodes end.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -87,54 +33,13 @@
 <script src="overlay.js?v=2"></script>
 <script>
 (function(){
-  const SAND = '#d3a15a', ACCENT = '#1a5c86', CLOUD = '#b9b4ab';
+  const SAND = '#d3a15a', SPEED = 4;                  // 1/4 speed: a 1.2 s clip reads as ~4.8 s
   const disc = vizDisc();
   const cm = v => (v * 100).toFixed(0);
-  const SC = ['drop', 'wall', 'slam'];
   const v = '?t=' + Date.now();
-  let tiles = [], clock = null, playing = true, T = 0, DT_MS = 10, frame = -1;
+  let tiles = [], T = 0, DT_MS = 10, frame = -1;
+  const clock = makeClock(() => SPEED, 700);
 
-  // ---- coverage chart: one facet per scenario. x = spin (shared); y = the parameter that scenario
-  // actually samples (height for drop, which has no launch velocity; launch speed for wall and slam) ----
-  const FACET = {
-    drop: {key: 1, lo: 0.30, hi: 0.80, unit: 'spawn height (m)', fmt: v => v.toFixed(1), ticks: [0.4, 0.6, 0.8], note: 'released at rest'},
-    wall: {key: 2, lo: 1.2,  hi: 3.8,  unit: 'launch speed (m/s)', fmt: v => v.toFixed(1), ticks: [1.5, 2.5, 3.5], note: 'from 0.40–0.70 m'},
-    slam: {key: 2, lo: 2.8,  hi: 6.3,  unit: 'launch speed (m/s)', fmt: v => v.toFixed(1), ticks: [3, 4.5, 6], note: 'from 0.60–0.85 m'},
-  };
-  function chart(cov){
-    const W = 1080, PH = 210, PAD = {l: 48, r: 12, t: 24, b: 40}, GAP = 26;
-    const pw = (W - GAP * 2) / 3, iw = pw - PAD.l - PAD.r, ih = PH - PAD.t - PAD.b;
-    const SPIN = 12.5;
-    const x = w => PAD.l + w / SPIN * iw;
-    let svg = `<svg viewBox="0 0 ${W} ${PH}" role="img" aria-label="Spin against each scenario's sampled launch parameter for all 10,000 training episodes, one panel per scenario, with the twelve shown here marked">`;
-    SC.forEach((name, si) => {
-      const F = FACET[name], ox = si * (pw + GAP);
-      const y = val => PAD.t + (1 - (val - F.lo) / (F.hi - F.lo)) * ih;
-      const pts = cov.points.filter(p => p[0] === si);
-      svg += `<g transform="translate(${ox},0)">`;
-      svg += `<line x1="${PAD.l}" y1="${PAD.t + ih}" x2="${PAD.l + iw}" y2="${PAD.t + ih}" stroke="#111" stroke-width="1"/>`;
-      svg += `<line x1="${PAD.l}" y1="${PAD.t}" x2="${PAD.l}" y2="${PAD.t + ih}" stroke="#ddd" stroke-width="1"/>`;
-      for (const t of F.ticks){
-        svg += `<line x1="${PAD.l}" y1="${y(t)}" x2="${PAD.l + iw}" y2="${y(t)}" stroke="#eee" stroke-width="1"/>`;
-        svg += `<text x="${PAD.l - 7}" y="${y(t) + 3.5}" text-anchor="end" font-size="10.5" fill="#666">${F.fmt(t)}</text>`;
-      }
-      for (const w of [0, 4, 8, 12])
-        svg += `<text x="${x(w)}" y="${PAD.t + ih + 14}" text-anchor="middle" font-size="10.5" fill="#666">${w}</text>`;
-      let d = '';
-      for (const p of pts) d += `M${x(p[3]).toFixed(1)} ${y(p[F.key]).toFixed(1)}h.01`;
-      svg += `<path d="${d}" stroke="${CLOUD}" stroke-width="2.4" stroke-linecap="round" opacity="0.45"/>`;
-      for (const e of cov.selected.filter(e => e.scenario === name))
-        svg += `<circle cx="${x(e.spin0).toFixed(1)}" cy="${y(F.key === 1 ? e.height : e.speed0).toFixed(1)}" r="4.6" fill="${ACCENT}" stroke="#fbfaf8" stroke-width="2"/>`;
-      svg += `<text x="${PAD.l}" y="12" font-size="13" font-weight="600" fill="#111">${name}</text>`;
-      svg += `<text x="${PAD.l + iw}" y="12" text-anchor="end" font-size="11" fill="#666">${pts.length.toLocaleString()} episodes · ${F.note}</text>`;
-      svg += `<text x="${PAD.l + iw / 2}" y="${PH - 6}" text-anchor="middle" font-size="10.5" fill="#666">initial spin (rad/s)</text>`;
-      svg += `<text transform="translate(13,${PAD.t + ih / 2}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="#666">${F.unit}</text>`;
-      svg += `</g>`;
-    });
-    document.getElementById('chart').innerHTML = svg + '</svg>';
-  }
-
-  // ---- one WebGL context, one camera; each tile is a scissor viewport ----
   function arena(H){
     const s = new THREE.Scene();
     const g = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); g.position.set(0.5, 0, 0.5); s.add(g);
@@ -143,7 +48,6 @@
     const up = new THREE.LineBasicMaterial({color: 0xb0b0b0});
     for (const [a, c] of [[0,0],[1,0],[1,1],[0,1]]) s.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(a,0,c), P(a,H,c)]), up));
     s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,H,0), P(1,H,0), P(1,H,1), P(0,H,1)]), new THREE.LineBasicMaterial({color: 0xcccccc})));
-    const ax = new THREE.AxesHelper(0.08); ax.position.set(-0.02, 0.001, -0.02); s.add(ax);
     return s;
   }
 
@@ -154,28 +58,23 @@
   camera.position.set(2.15, 1.15, 2.15);
   const controls = new THREE.OrbitControls(camera, document.getElementById('grid'));
   controls.enableDamping = true; controls.dampingFactor = 0.08;
-  controls.enableZoom = false;                                // keep the page scrollable over the grid
+  controls.enableZoom = false; controls.enablePan = false;      // rotate only; the page keeps scrolling normally
   controls.maxPolarAngle = Math.PI / 2 - 0.02;
   controls.target.set(0.5, 0.22, 0.5);
 
-  function resize(){
-    const w = innerWidth, h = innerHeight;
-    if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio()))
-      renderer.setSize(w, h, false);
-  }
   function render(){
-    resize();
+    const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+    if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)) renderer.setSize(w, h, false);
     renderer.setScissorTest(false);
-    renderer.setClearColor(0x000000, 0); renderer.clear();      // page shows through outside the tiles
+    renderer.setClearColor(0x000000, 0); renderer.clear();       // page shows through outside the tiles
     renderer.setScissorTest(true);
-    renderer.setClearColor(0xfbfaf8, 1);                        // each tile rect gets the paper tint
+    renderer.setClearColor(0xfbfaf8, 1);                         // each tile gets the paper tint
     for (const t of tiles){
       if (!t.scene) continue;
       const r = t.el.getBoundingClientRect();
       if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
-      const bottom = innerHeight - r.bottom;
-      renderer.setViewport(r.left, bottom, r.width, r.height);
-      renderer.setScissor(r.left, bottom, r.width, r.height);
+      renderer.setViewport(r.left, innerHeight - r.bottom, r.width, r.height);
+      renderer.setScissor(r.left, innerHeight - r.bottom, r.width, r.height);
       camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
       renderer.render(t.scene, camera);
     }
@@ -185,17 +84,15 @@
     frame = f;
     for (const t of tiles){
       if (!t.buf) continue;
-      const n = t.n, base = Math.min(f, t.T - 1) * n * 3;
-      t.geo.attributes.position.array.set(t.buf.subarray(base, base + n * 3));
+      const base = Math.min(f, t.T - 1) * t.n * 3;
+      t.geo.attributes.position.array.set(t.buf.subarray(base, base + t.n * 3));
       t.geo.attributes.position.needsUpdate = true;
     }
-    const sc = document.getElementById('scrub'); sc.value = f;
-    document.getElementById('frame').textContent = `${f + 1} / ${T} · ${(f * DT_MS).toFixed(0)} ms`;
   }
   function loop(ts){
     controls.update();
-    if (T > 0){                                                 // nothing to show until the first buffer lands
-      const f = Math.min(T - 1, Math.round(clock.tick(ts, playing, (T - 1) * DT_MS) / DT_MS));
+    if (T > 0){
+      const f = Math.min(T - 1, Math.round(clock.tick(ts, true, (T - 1) * DT_MS) / DT_MS));
       if (f !== frame) setFrame(f);
     }
     render();
@@ -203,55 +100,18 @@
   }
 
   async function init(){
-    let cov, index;
-    try {
-      cov = await (await fetch('data/sandtrain/coverage.json' + v)).json();
-      index = await (await fetch('data/sandtrain/index.json' + v)).json();
-    } catch (e){ document.getElementById('chart').innerHTML = '<p class="caption">Could not load data/sandtrain/…</p>'; return; }
-
-    const d = cov.dataset;
-    document.getElementById('stats').innerHTML = [
-      [d.splits.train.toLocaleString(), 'training episodes'],
-      [d.particles.toLocaleString(), 'points per episode'],
-      [d.frames, 'frames each'],
-      [(d.dt_s * 1000).toFixed(1) + ' ms', 'per frame'],
-      [(d.frames * d.dt_s).toFixed(1) + ' s', 'simulated per episode'],
-      [(d.splits.train * d.frames / 1e6).toFixed(1) + ' M', 'training frames'],
-    ].map(([a, b]) => `<div><b>${a}</b><span>${b}</span></div>`).join('');
-    document.getElementById('dsline').textContent =
-      `${d.name} — ${d.object}; ${d.subsample} of ${d.of} simulated particles, farthest-point sampled, the same points in every episode. Held out: ${d.splits.val} validation and ${d.splits.eval} test episodes.`;
-
-    cov.selected = index;
-    chart(cov);
-
-    // table
-    const tb = document.querySelector('#tbl tbody');
-    index.forEach((e, i) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="mono">${e.stem}</td><td>${e.scenario} · ${e.cell}</td><td>${cm(e.height)} cm</td>`
-        + `<td>${e.speed0.toFixed(1)} m/s</td><td>${e.spin0.toFixed(1)} rad/s</td>`
-        + `<td>${e.floor_frame < 0 ? '—' : (e.floor_frame * 2.5).toFixed(0) + ' ms'}</td>`
-        + `<td>${(e.settle_frame * 2.5).toFixed(0)} ms</td><td>${e.final_spread_cm.toFixed(0)} cm</td>`;
-      tr.onclick = () => focusTile(i);
-      tb.appendChild(tr);
-    });
-
-    // tiles
+    let index;
+    try { index = await (await fetch('data/sandtrain/index.json' + v)).json(); }
+    catch (e){ document.getElementById('grid').innerHTML = '<p class="caption">Could not load data/sandtrain/index.json</p>'; return; }
     const grid = document.getElementById('grid');
-    tiles = index.map((e, i) => {
+    tiles = index.map(e => {
       const fig = document.createElement('figure'); fig.className = 'tile';
-      fig.innerHTML = `<div class="view"></div><figcaption><b>${e.scenario}</b> <span class="tag">${e.cell}</span><br>`
-        + `${cm(e.height)} cm · ${e.speed0.toFixed(1)} m/s · spin ${e.spin0.toFixed(1)}</figcaption>`;
-      fig.onclick = () => focusTile(i);
+      fig.innerHTML = `<div class="view"></div><figcaption><b>${e.scenario}</b> · ${cm(e.height)} cm`
+        + `${e.speed0 > 0.05 ? ' · ' + e.speed0.toFixed(1) + ' m/s' : ''} · spin ${e.spin0.toFixed(1)} rad/s</figcaption>`;
       grid.appendChild(fig);
-      return {el: fig.querySelector('.view'), fig, meta: e};
+      return {el: fig.querySelector('.view')};
     });
-
-    document.getElementById('scrub').max = 0;
-    clock = makeClock(() => getSpeed(), 900);
     requestAnimationFrame(loop);
-
-    // progressive load: each tile starts playing as soon as its buffer lands
     await Promise.all(index.map(async (e, i) => {
       const m = await (await fetch(`data/sandtrain/${e.stem}/meta.json` + v)).json();
       const buf = new Float32Array(await (await fetch(`data/sandtrain/${e.stem}/pos.bin` + v)).arrayBuffer());
@@ -262,32 +122,10 @@
       t.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(t.n * 3), 3));
       const pts = new THREE.Points(t.geo, new THREE.PointsMaterial({size: 0.013, map: disc, color: SAND, transparent: true, alphaTest: 0.4, depthWrite: true, sizeAttenuation: true}));
       pts.frustumCulled = false; t.scene.add(pts);
-      T = Math.max(T, m.n_frames); document.getElementById('scrub').max = T - 1;
+      T = Math.max(T, m.n_frames);
       setFrame(Math.max(frame, 0));
     }));
   }
-
-  function focusTile(i){
-    const t = tiles[i], was = t.fig.classList.contains('big');
-    tiles.forEach(x => { x.fig.classList.remove('big', 'on'); });
-    document.querySelectorAll('#tbl tr.on').forEach(r => r.classList.remove('on'));
-    if (!was){
-      t.fig.classList.add('big', 'on');
-      document.querySelectorAll('#tbl tbody tr')[i].classList.add('on');
-      t.fig.scrollIntoView({behavior: 'smooth', block: 'center'});
-    }
-  }
-
-  const ctl = document.querySelector('.ctl');
-  const getSpeed = makeSpeed(ctl, [[1, 'Real time'], [4, '¼ speed'], [10, '1/10 speed'], [25, '1/25 speed']]);
-  ctl.querySelector('#speed').value = 4;
-  ctl.querySelector('.play').onclick = function(){ playing = !playing; this.textContent = playing ? 'Pause' : 'Play'; };
-  ctl.querySelector('.replay').onclick = () => { clock.set(0); setFrame(0); playing = true; ctl.querySelector('.play').textContent = 'Pause'; };
-  document.getElementById('scrub').oninput = function(){
-    playing = false; ctl.querySelector('.play').textContent = 'Play';
-    setFrame(+this.value); clock.set(frame * DT_MS);
-  };
-  addEventListener('resize', render);
   init();
 })();
 </script>
