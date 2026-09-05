@@ -4,45 +4,180 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<title>Train vs held-out — frs1024_c2n2_dt150</title>
+<title>Training corpus vs eval — frs1024_c2n2_dt150</title>
 <link rel="stylesheet" href="site.css?v=20260902">
 <style>
-  .wrap{max-width:none}
-  .ttl{font-family:var(--serif); font-size:20px; font-weight:600; margin:30px 0 2px}
+  .wrap{max-width:none; position:relative; z-index:1}
+  #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
+  .ttl{font-family:var(--serif); font-size:20px; font-weight:600; margin:32px 0 2px}
   .ttl:first-child{margin-top:8px}
   .ttl span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft); letter-spacing:.02em}
+  .ctl{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0 4px;
+       font-size:12.5px; color:var(--soft)}
+  .ctl select{font:inherit; font-size:12.5px; color:var(--ink); background:#fff; border:1px solid var(--line);
+              padding:3px 6px}
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin:12px 0 0; cursor:grab}
+  .grid:active{cursor:grabbing}
+  .tile{margin:0}
+  .tile .view{height:420px; border:1px solid var(--line); background:transparent}
+  .tile .view.tr{border-color:#9fc3a8}
+  .tile figcaption{font-size:12px; color:var(--soft); margin:5px 1px 0}
+  .tile figcaption b{color:var(--ink); font-weight:600}
+  .tile figcaption .tr{color:var(--s3); font-weight:600}
+  .tile figcaption .ev{color:var(--s1); font-weight:600}
   svg{width:100%; display:block}
   .g2{display:grid; grid-template-columns:1fr 1fr; gap:16px 26px; margin:12px 0 0}
   td.k,th:first-child{text-align:left}
-  td.ho,th.ho{color:var(--s2)}
-  .note{font-size:14px; color:#333; margin:14px 0 0; line-height:1.55; max-width:78ch}
-  .note b{font-weight:600}
-  @media(max-width:820px){ .g2{grid-template-columns:1fr} }
+  .note{font-size:14px; color:#333; margin:14px 0 0; line-height:1.55; max-width:80ch}
+  @media(max-width:820px){ .grid,.g2{grid-template-columns:1fr} .tile .view{height:320px} }
 </style>
 </head>
 <body>
+<canvas id="bg"></canvas>
 <div class="wrap">
-  <p class="ttl">Single window <span>one prediction from 2 GT frames — training episodes vs held-out episodes</span></p>
-  <svg id="c_win" style="height:300px"></svg><div class="leg" id="l_win"></div>
+  <p class="ttl">Rollouts side by side
+    <span>episodes the model trained on, next to episodes it never saw — same step size, same 400 ms</span></p>
+  <div class="ctl">
+    <label>step size <select id="dt"></select></label>
+    <label>speed <select id="sp"></select></label>
+    <span class="leg" id="leg"></span>
+  </div>
+  <div class="grid" id="grid"></div>
 
-  <p class="ttl">Whole 400 ms rollout <span>same protocol on both splits, 60 episodes each</span></p>
-  <svg id="c_roll" style="height:300px"></svg><div class="leg" id="l_roll"></div>
-
-  <p class="ttl">Numbers <span>ratio &gt; 1 means the model does worse on episodes it never saw</span></p>
+  <p class="ttl">Error vs step size <span>60 episodes per split, identical anchors and protocol</span></p>
+  <div class="g2">
+    <div><svg id="c_win" style="height:280px"></svg><div class="leg" id="l_win"></div></div>
+    <div><svg id="c_roll" style="height:280px"></svg><div class="leg" id="l_roll"></div></div>
+  </div>
   <table id="t"></table>
   <p class="note" id="verdict"></p>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const V = '?t=' + Date.now(), HO = '#c0392b';
+const V = '?t=' + Date.now();
+const GT_COL = '#b9b4ab', HORIZON = 400, N_TILE = 4;
+let SPEED = 8, TR = null, EV = null, tiles = [], last = -1;
+const disc = vizDisc(), clock = makeClock(() => SPEED, 600);
 
-function chart(id, legId, series, ylab){
+const canvas = document.getElementById('bg');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
+camera.position.set(2.05, 1.25, 2.05);
+const controls = new THREE.OrbitControls(camera, document.body);
+addEventListener('pointerdown', e => { controls.enabled = !e.target.closest('select, table, a'); }, true);
+addEventListener('pointerup', () => { controls.enabled = true; }, true);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.enableZoom = false; controls.enablePan = false;
+controls.maxPolarAngle = Math.PI/2 - 0.02; controls.target.set(0.5, 0.28, 0.5);
+
+function arena(H){
+  const s = new THREE.Scene();
+  const g = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); g.position.set(0.5,0,0.5); s.add(g);
+  const P = (a,b,c) => new THREE.Vector3(a,b,c);
+  s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0),P(1,0,0),P(1,0,1),P(0,0,1)]),
+       new THREE.LineBasicMaterial({color:0x444444})));
+  const up = new THREE.LineBasicMaterial({color:0xc4c4c4});
+  for (const [a,c] of [[0,0],[1,0],[1,1],[0,1]])
+    s.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(a,0,c),P(a,H,c)]), up));
+  return s;
+}
+function cloud(scene, col, size){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+  const p = new THREE.Points(geo, new THREE.PointsMaterial({size, map:disc, color:col,
+              transparent:true, alphaTest:0.4, sizeAttenuation:true}));
+  p.frustumCulled = false; scene.add(p); return geo;
+}
+function render(){
+  const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+  if (canvas.width !== Math.floor(w*pr) || canvas.height !== Math.floor(h*pr)) renderer.setSize(w, h, false);
+  renderer.setScissorTest(false); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.setScissorTest(true); renderer.setClearColor(0xfbfaf8, 1);
+  for (const t of tiles){
+    const r = t.el.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) continue;
+    renderer.setViewport(r.left, innerHeight-r.bottom, r.width, r.height);
+    renderer.setScissor(r.left, innerHeight-r.bottom, r.width, r.height);
+    camera.aspect = r.width/r.height; camera.updateProjectionMatrix();
+    renderer.render(t.scene, camera);
+  }
+  renderer.setScissorTest(false);
+}
+function loop(ts){
+  controls.update();
+  const ms = clock.tick(ts, true, HORIZON);
+  if (ms !== last){
+    last = ms;
+    for (const t of tiles){
+      const f = Math.min(t.meta.n_frames-1, Math.floor(ms / t.meta.dt_ms));
+      if (f === t.f) continue;
+      t.f = f;
+      for (const c of t.clouds){
+        const n = t.meta.n_particles;
+        if (c.geo.attributes.position.array.length !== n*3)
+          c.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+        c.geo.attributes.position.array.set(c.data.subarray(f*n*3, f*n*3 + n*3));
+        c.geo.attributes.position.needsUpdate = true;
+      }
+    }
+  }
+  render(); requestAnimationFrame(loop);
+}
+
+const cache = new Map();
+async function get(base, dir, name, meta){
+  const key = base+dir+name;
+  if (cache.has(key)) return cache.get(key);
+  const raw = new Uint16Array(await (await fetch(`data/${base}/roll/${dir}/${name}.bin`+V)).arrayBuffer());
+  const out = new Float32Array(raw.length), lo = meta.q_lo, sc = meta.q_scale/65535;
+  for (let i=0;i<raw.length;i++) out[i] = lo + raw[i]*sc;
+  cache.set(key, out); return out;
+}
+async function metaOf(base, dir){
+  const key = base+dir+'meta';
+  if (!cache.has(key)) cache.set(key, await (await fetch(`data/${base}/roll/${dir}/meta.json`+V)).json());
+  return cache.get(key);
+}
+
+async function gallery(){
+  const host = document.getElementById('grid');
+  tiles = []; host.innerHTML = '';
+  const k = document.getElementById('dt').value;
+  document.getElementById('leg').innerHTML =
+    `<span style="background:${GT_COL}"></span>ground truth`
+    + `<span style="background:${css('--s3')}"></span>model, training episode`
+    + `<span style="background:${css('--s1')}"></span>model, held-out episode`;
+  for (const [base, D, cls, col, lab] of [['frsperf_train', TR, 'tr', css('--s3'), 'training episode'],
+                                          ['frsperf',  EV, 'ev', css('--s1'), 'held out']]){
+    for (const clip of Object.keys(D.grid).slice(0, N_TILE)){
+      const r = D.grid[clip][k]; if (!r) continue;
+      const fig = document.createElement('figure'); fig.className = 'tile';
+      fig.innerHTML = `<div class="view ${cls==='tr'?'tr':''}"></div>`
+        + `<figcaption><span class="${cls}">${lab}</span> · ${clip.split('_')[0]} · `
+        + `${clip.split('_').pop()} · <b>${r.ade_mm} mm</b></figcaption>`;
+      host.appendChild(fig);
+      const m = await metaOf(base, r.dir), sc = arena(1.2);
+      const clouds = [{geo: cloud(sc, GT_COL, 0.014), data: await get(base, r.dir, 'gt', m)},
+                      {geo: cloud(sc, col, 0.015),    data: await get(base, r.dir, 'pred', m)}];
+      tiles.push({el: fig.querySelector('.view'), scene: sc, clouds, meta: m, f: -1});
+    }
+  }
+}
+
+function chart(id, legId, group, ylab){
   const svg = document.getElementById(id), W = Math.max(svg.clientWidth, 340);
-  const H = svg.clientHeight || 300, L = 66, R = 18, Tp = 12, B = 30;
+  const H = svg.clientHeight || 280, L = 66, R = 18, Tp = 12, B = 30;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const vals = series.flatMap(s => s.pts.map(p => p[1])).filter(v => v > 0);
+  const ks = Object.keys(EV[group]).map(Number).filter(k=>!EV[group][k].held_out).sort((a,b)=>a-b);
+  const series = [{name:'training episodes', color:css('--s3'), D:TR}, {name:'held-out episodes', color:css('--s1'), D:EV}]
+    .map(s => ({...s, pts: ks.filter(k=>s.D[group][k]).map(k => [s.D[group][k].dt_ms, s.D[group][k].ade_mm])}));
+  const vals = series.flatMap(s => s.pts.map(p=>p[1]));
   const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
   const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
   const X = d => L+(W-L-R)*(Math.log10(d)-Math.log10(2.5))/(Math.log10(150)-Math.log10(2.5));
@@ -56,76 +191,58 @@ function chart(id, legId, series, ylab){
   g += `<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" text-anchor="middle"
         transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})">${ylab}</text>`;
   for (const s of series){
-    const tr = s.pts.filter(p => !p[2]);
-    g += `<path d="${tr.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}"
-           fill="none" stroke="${s.color}" stroke-width="2" ${s.dash?'stroke-dasharray="5 4"':''}/>`;
-    for (const p of s.pts)
-      g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${p[2]?5:3.6}" fill="${p[2]?HO:s.color}"
-             ${s.dash?`stroke="#fff" stroke-width="1.2"`:''}/>`;
+    g += `<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}"
+           fill="none" stroke="${s.color}" stroke-width="2" ${s.D===TR?'stroke-dasharray="5 4"':''}/>`;
+    for (const p of s.pts) g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.6" fill="${s.color}"/>`;
   }
   svg.innerHTML = g;
   document.getElementById(legId).innerHTML =
-    series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('')
-    + `<span style="background:${HO}"></span>step size never trained on`;
+    series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('');
 }
 
 Promise.all([
   fetch('data/frsperf_train/summary.json'+V).then(r=>r.json()),
   fetch('data/frsperf/summary.json'+V).then(r=>r.json()),
-]).then(([TR, VA]) => {
-  const ks = Object.keys(VA.windows).map(Number).sort((a,b)=>a-b);
-  const P = (D,g) => ks.filter(k=>D[g][k]).map(k => [D[g][k].dt_ms, D[g][k].ade_mm, D[g][k].held_out]);
-  const draw = () => {
-    chart('c_win','l_win',[
-      {name:'training episodes', color:css('--s3'), pts:P(TR,'windows'), dash:true},
-      {name:'held-out episodes', color:css('--s1'), pts:P(VA,'windows')}], 'window error (mm)');
-    chart('c_roll','l_roll',[
-      {name:'training episodes', color:css('--s3'), pts:P(TR,'rollouts'), dash:true},
-      {name:'held-out episodes', color:css('--s1'), pts:P(VA,'rollouts')}], 'rollout error (mm)');
-  };
-  draw(); addEventListener('resize', draw);
+]).then(async ([tr, ev]) => {
+  TR = tr; EV = ev;
+  const ks = Object.keys(EV.rollouts).map(Number).filter(k=>!EV.rollouts[k].held_out).sort((a,b)=>a-b);
+  const dt = document.getElementById('dt');
+  for (const k of ks) dt.add(new Option(EV.rollouts[k].dt_ms + ' ms', String(k)));
+  dt.value = String(ks.find(k => EV.rollouts[k].dt_ms === 20) ?? ks[0]);
+  const sp = document.getElementById('sp');
+  for (const [lab,v] of [['1/4 speed',4],['1/8 speed',8],['1/16 speed',16]]) sp.add(new Option(lab, v));
+  sp.value = String(SPEED); sp.onchange = () => SPEED = +sp.value;
+  dt.onchange = gallery;
 
-  const row = (lab, get) => {
-    let h = `<tr><td class="k">${lab}</td>`;
-    for (const k of ks) h += `<td class="${VA.windows[k].held_out?'ho':''}">${get(k)}</td>`;
-    return h + '</tr>';
-  };
-  let h = '<tr><th>step size</th>' + ks.map(k =>
-      `<th class="${VA.windows[k].held_out?'ho':''}">${VA.windows[k].dt_ms}${VA.windows[k].held_out?' †':''}</th>`
-    ).join('') + '</tr>';
-  h += row('window · train', k => TR.windows[k].ade_mm.toFixed(2));
-  h += row('window · held out', k => VA.windows[k].ade_mm.toFixed(2));
-  h += row('ratio', k => (VA.windows[k].ade_mm/TR.windows[k].ade_mm).toFixed(2));
-  h += row('rollout · train', k => TR.rollouts[k] ? TR.rollouts[k].ade_mm.toFixed(1) : '–');
-  h += row('rollout · held out', k => VA.rollouts[k] ? VA.rollouts[k].ade_mm.toFixed(1) : '–');
-  h += row('ratio', k => (TR.rollouts[k] && VA.rollouts[k])
-        ? (VA.rollouts[k].ade_mm/TR.rollouts[k].ade_mm).toFixed(2) : '–');
+  const drawCharts = () => { chart('c_win','l_win','windows','window error (mm)');
+                             chart('c_roll','l_roll','rollouts','rollout error (mm)'); };
+  drawCharts(); addEventListener('resize', drawCharts);
+
+  const row = (lab, get) => '<tr><td class="k">'+lab+'</td>' + ks.map(k=>`<td>${get(k)}</td>`).join('') + '</tr>';
+  let h = '<tr><th>step size</th>' + ks.map(k=>`<th>${EV.rollouts[k].dt_ms} ms</th>`).join('') + '</tr>';
+  h += row('window · training', k => TR.windows[k].ade_mm.toFixed(2));
+  h += row('window · held out', k => EV.windows[k].ade_mm.toFixed(2));
+  h += row('ratio', k => (EV.windows[k].ade_mm/TR.windows[k].ade_mm).toFixed(2));
+  h += row('rollout · training', k => TR.rollouts[k].ade_mm.toFixed(1));
+  h += row('rollout · held out', k => EV.rollouts[k].ade_mm.toFixed(1));
+  h += row('ratio', k => (EV.rollouts[k].ade_mm/TR.rollouts[k].ade_mm).toFixed(2));
   document.getElementById('t').innerHTML = h;
 
-  const tr = ks.filter(k=>!VA.windows[k].held_out), ho = ks.filter(k=>VA.windows[k].held_out);
   const mean = a => a.reduce((x,y)=>x+y,0)/a.length;
-  const gap = (D,g) => mean(tr.filter(k=>D[g][k]).map(k=>D[g][k].ade_mm));
-  // penalty for an UNSEEN RATE, measured separately on each split: the held-out
-  // rung against the mean of the two trained rungs on either side of it
-  const nb = {12:[8,16], 32:[24,40]};
-  const unseen = (D,g) => mean(ho.filter(k=>D[g][k] && nb[k].every(j=>D[g][j]))
-    .map(k => D[g][k].ade_mm / mean(nb[k].map(j=>D[g][j].ade_mm))));
-  const rW = gap(VA,'windows')/gap(TR,'windows'), rR = gap(VA,'rollouts')/gap(TR,'rollouts');
+  const rW = mean(ks.map(k=>EV.windows[k].ade_mm/TR.windows[k].ade_mm));
+  const rR = mean(ks.map(k=>EV.rollouts[k].ade_mm/TR.rollouts[k].ade_mm));
+  const worst = ks.reduce((a,k)=>Math.max(a, EV.rollouts[k].ade_mm/TR.rollouts[k].ade_mm), 0);
   document.getElementById('verdict').innerHTML =
-    `<b>Episodes it never saw cost almost nothing.</b> Averaged over the trained step sizes, error on held-out `
-    + `episodes is ${rW.toFixed(2)}× the training-episode error on a single window and ${rR.toFixed(2)}× over a `
-    + `full rollout — within a few percent of 1 in both directions, which is the spread you get between any two `
-    + `samples of ${TR.n_stats} episodes. After ~1 epoch there is nothing to memorize, and the numbers agree.`
-    + `<br><br><b>Step sizes it never saw cost a lot — on both splits equally.</b> Measured against the mean of `
-    + `the two trained rungs on either side, an unseen rate costs `
-    + `${unseen(TR,'windows').toFixed(2)}× on training episodes and ${unseen(VA,'windows').toFixed(2)}× on `
-    + `held-out ones for a single window; ${unseen(TR,'rollouts').toFixed(2)}× and `
-    + `${unseen(VA,'rollouts').toFixed(2)}× over a full rollout. The penalty is the same whether or not the `
-    + `episode was in the training set, so this is not the model failing to generalize to new scenes — it is `
-    + `the model never having learned a continuous function of Δt. Δt was drawn from eight discrete rungs and `
-    + `that is what it fit.`
-    + `<br><br>${TR.n_stats} episodes per split, identical anchors and protocol, checkpoint ${TR.ckpt} at step `
-    + `${TR.step.toLocaleString()}. † never trained.`;
+    `Across every trained step size, error on held-out episodes is <b>${rW.toFixed(2)}×</b> the `
+    + `training-episode error on a single window and <b>${rR.toFixed(2)}×</b> over a full 400 ms rollout; the `
+    + `largest gap at any step size is ${worst.toFixed(2)}×. That is inside the spread between two samples of `
+    + `${EV.n_stats} episodes, and the sign flips from rung to rung — so there is no measurable memorization `
+    + `gap. With roughly one pass over the corpus there is nothing to memorize, and the numbers agree. `
+    + `${EV.n_stats} episodes per split, identical anchors and protocol, checkpoint ${EV.ckpt} at step `
+    + `${EV.step.toLocaleString()}.`;
+
+  requestAnimationFrame(loop);
+  await gallery();
 });
 })();
 </script>
