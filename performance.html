@@ -268,15 +268,19 @@ async function sectionSAMP(){
   const host = document.getElementById('grid_s'); clear(host);
   const k = document.getElementById('dt2').value;
   const r = S.grid[EP2][k]; if (!r) return;
-  const arms = [{bin:'pred', name:'one shot', ade:r.ade_mm, col:PR_COL}]
-    .concat(r.variants.map((v,i) => ({bin:v.name, name:v.name.replace('_',' · '), ade:v.ade_mm, col:ALT[i%3]})));
+  // one draw is enough to make the point; the second is kept on disk as the
+  // spread measurement behind the variance claim, not shown here
+  const NAME = {draw1_25step: '25 steps', pyramid_25step: 'pyramid, 25 steps'};
+  const shown = r.variants.filter(v => v.name in NAME);
+  const arms = [{bin:'pred', name:'one step', ade:r.ade_mm, col:PR_COL}]
+    .concat(shown.map((v,i) => ({bin:v.name, name:NAME[v.name], ade:v.ade_mm, col:ALT[i%3]})));
   for (const a of arms)
     await tile(host, r.dir, `<b>${a.name}</b> · ${a.ade} mm`,
       [{bin:'gt', color:GT_COL, size:0.014}, {bin:a.bin, color:a.col, size:0.015}]);
   let h = '<tr><th>sampler</th><th>rollout ADE (mm)</th><th>final error (mm)</th></tr>'
-        + `<tr><td class="k">one shot — a single pass at t=999</td><td>${r.ade_mm}</td><td>${r.fde_mm}</td></tr>`;
-  for (const v of r.variants)
-    h += `<tr><td class="k">${v.name.replace(/_/g,' ')}</td><td>${v.ade_mm}</td><td>${v.fde_mm}</td></tr>`;
+        + `<tr><td class="k">one step — a single pass at t=999</td><td>${r.ade_mm}</td><td>${r.fde_mm}</td></tr>`;
+  for (const v of shown)
+    h += `<tr><td class="k">${NAME[v.name]}</td><td>${v.ade_mm}</td><td>${v.fde_mm}</td></tr>`;
   document.getElementById('t_s').innerHTML = h;
 }
 function sectionROLL(){
