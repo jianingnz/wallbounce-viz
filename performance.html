@@ -17,11 +17,11 @@
   .ctl select{font:inherit; font-size:12.5px; color:var(--ink); background:#fff; border:1px solid var(--line);
               padding:3px 6px}
   .ctl b{color:var(--ink); font-weight:600}
-  .g4{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:12px 0 0}
-  .g3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:12px 0 0}
+  .g4,.g3{display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin:12px 0 0; cursor:grab}
+  .g4:active,.g3:active{cursor:grabbing}
   .g2{display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin:12px 0 0}
   .tile{margin:0}
-  .tile .view{height:230px; border:1px solid var(--line); background:transparent}
+  .tile .view{height:440px; border:1px solid var(--line); background:transparent}
   .tile .view.ho{border-color:var(--s2)}
   .tile figcaption{font-size:12px; color:var(--soft); margin:5px 1px 0; line-height:1.35}
   .tile figcaption b{color:var(--ink); font-weight:600}
@@ -31,8 +31,7 @@
   td.k,th:first-child{text-align:left}
   td.ho{color:var(--s2)}
   .note{font-size:13px; color:#333; margin:10px 0 0; line-height:1.5; max-width:70ch}
-  @media(max-width:1100px){ .g4{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(2,1fr)} }
-  @media(max-width:700px){ .g4,.g3,.g2{grid-template-columns:1fr} }
+  @media(max-width:820px){ .g4,.g3,.g2{grid-template-columns:1fr} .tile .view{height:330px} }
 </style>
 </head>
 <body>
@@ -94,7 +93,9 @@ const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
 camera.position.set(2.05, 1.25, 2.05);
-const controls = new THREE.OrbitControls(camera, document.getElementById('grid_dt'));
+const controls = new THREE.OrbitControls(camera, document.body);
+addEventListener('pointerdown', e => { controls.enabled = !e.target.closest('select, table, a'); }, true);
+addEventListener('pointerup', () => { controls.enabled = true; }, true);
 controls.enableDamping = true; controls.dampingFactor = 0.08;
 controls.enableZoom = false; controls.enablePan = false;
 controls.maxPolarAngle = Math.PI/2 - 0.02; controls.target.set(0.5, 0.28, 0.5);
