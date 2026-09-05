@@ -34,20 +34,15 @@
 <canvas id="bg"></canvas>
 <div class="wrap">
   <p class="ttl">Autoregressive rollout at every step size
-    <span>5 context frames in, 16 predicted frames per chunk, chained to the same 400 ms</span></p>
+    <span>cube shells, whole episodes from 5 ground-truth frames, chunks of 16 predicted frames chained on the model&rsquo;s own output, pyramid sampler at 25 steps</span></p>
   <div class="ctl">
     <label>episode <select id="ep"></select></label>
-    <label>sampler <select id="sched"></select></label>
     <label>speed <select id="sp"></select></label>
     <span class="leg" id="leg"></span>
   </div>
   <div class="grid" id="grid_dt"></div>
 
-  <p class="ttl">Pyramid vs one shot <span>same episode, same step size, the two samplers side by side</span></p>
-  <div class="ctl"><label>step size <select id="dt2"></select></label></div>
-  <div class="grid" id="grid_s"></div>
-
-  <p class="ttl">Error over the rollout <span>mean over <b id="n_stats">–</b> validation episodes, cube and sphere</span></p>
+  <p class="ttl">Rollout error by step size <span><b id="n_stats">–</b> held-out cube episodes, 400 ms horizon</span></p>
   <table id="t_roll"></table>
   <p class="note" id="note"></p>
 </div>
@@ -59,7 +54,8 @@
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const V = '?t=' + Date.now();
-const GT_COL = '#b9b4ab', PYR = '#d4762c', ONE = '#1f5f8b', HO = '#c0392b', HORIZON = 400;
+const GT_COL = '#b9b4ab', PYR = '#d4762c', HO = '#c0392b';
+let SPAN = 1200;
 let SPEED = 8, S = null, tiles = [], last = -1, EP = null;
 const disc = vizDisc(), clock = makeClock(() => SPEED, 600);
 
@@ -111,7 +107,7 @@ function render(){
 }
 function loop(ts){
   controls.update();
-  const ms = clock.tick(ts, true, HORIZON);
+  const ms = clock.tick(ts, true, SPAN);
   if (ms !== last){
     last = ms;
     for (const t of tiles){
@@ -149,78 +145,65 @@ async function tile(host, dir, cap, layers, hoBorder){
   const m = await metaOf(dir), sc = arena(1.2), clouds = [];
   for (const L of layers) clouds.push({geo: cloud(sc, L.color, L.size, m.n_particles), data: await bin(dir, L.bin, m)});
   tiles.push({el: fig.querySelector('.view'), scene: sc, clouds, m, f: -1});
+  SPAN = Math.max(SPAN, (m.n_frames - 1) * m.dt_ms);
 }
-function clear(host){ tiles = tiles.filter(t => !host.contains(t.el)); host.innerHTML = ''; }
+function clear(host){ tiles = tiles.filter(t => !host.contains(t.el)); host.innerHTML = ''; SPAN = 0; }
 
 async function galleryDT(){
   const host = document.getElementById('grid_dt'); clear(host);
-  const sched = document.getElementById('sched').value;
-  const col = sched === 'pyramid' ? PYR : ONE;
+  const sched = 'pyramid', col = PYR;
   document.getElementById('leg').innerHTML =
     `<span style="background:${GT_COL}"></span>ground truth<span style="background:${col}"></span>model, ${sched}`;
   const ks = Object.keys(S.grid[EP]).map(Number).sort((a,b)=>a-b);
   for (const k of ks){
     const r = S.grid[EP][k][sched]; if (!r) continue;
     await tile(host, r.dir,
-      `<b>${r.dt_ms} ms</b> steps · ${Math.ceil(HORIZON/(16*r.dt_ms))} chunks · ${r.ade_mm} mm`
+      `<b>${r.dt_ms} ms</b> steps · ${r.ade_mm} mm`
       + (r.held_out ? ' · <span class="ho">never trained</span>' : ''),
       [{bin:'gt', color:GT_COL, size:0.013}, {bin:sched, color:col, size:0.014}], r.held_out);
   }
 }
-async function gallerySAMP(){
-  const host = document.getElementById('grid_s'); clear(host);
-  const k = document.getElementById('dt2').value;
-  for (const sched of ['pyramid','oneshot']){
-    const r = S.grid[EP][k] && S.grid[EP][k][sched]; if (!r) continue;
-    await tile(host, r.dir, `<b>${sched === 'pyramid' ? 'pyramid, 25 steps' : 'one shot'}</b> · ${r.dt_ms} ms · ${r.ade_mm} mm`,
-      [{bin:'gt', color:GT_COL, size:0.013},
-       {bin:sched, color:sched==='pyramid'?PYR:ONE, size:0.014}], r.held_out);
-  }
-}
 function table(){
-  const ks = Object.keys(S.rollouts).map(Number).sort((a,b)=>a-b);
-  const at = (r, ms) => { const j = Math.round(ms/r.dt_ms)-1;
-    return (j>=0 && j<r.per_frame_mm.length) ? r.per_frame_mm[j].toFixed(0) : '–'; };
-  let h = '<tr><th>step size</th><th>chunks</th><th>pyramid ADE</th><th>one-shot ADE</th>'
-        + '<th>pyramid @200 ms</th><th>pyramid @400 ms</th><th>one-shot @400 ms</th></tr>';
-  for (const k of ks){
-    const p = S.rollouts[k].pyramid, o = S.rollouts[k].oneshot;
-    const ho = p && p.held_out;
-    h += `<tr><td class="k${ho?' ho':''}">${(p||o).dt_ms} ms${ho?' †':''}</td><td>${(p||o).chunks}</td>`
-       + `<td class="${ho?'ho':''}">${p?p.ade_mm:'–'}</td><td class="${ho?'ho':''}">${o?o.ade_mm:'–'}</td>`
-       + `<td>${p?at(p,200):'–'}</td><td>${p?at(p,400):'–'}</td><td>${o?at(o,400):'–'}</td></tr>`;
-  }
-  document.getElementById('t_roll').innerHTML = h;
-  document.getElementById('n_stats').textContent = S.n_stats;
+  const cubes = S.episodes.filter(e => e.object === 'cube').map(e => e.clip);
+  const ks = Object.keys(S.grid[cubes[0]]).map(Number).sort((a,b)=>a-b);
+  const cell = (clip, k) => (S.grid[clip][k] || {}).pyramid;
+  let h = '<tr><th>episode</th>' + ks.map(k => {
+      const r = cell(cubes[0], k);
+      return `<th class="${r&&r.held_out?'ho':''}">${r?r.dt_ms:k*2.5} ms${r&&r.held_out?' †':''}</th>`;
+    }).join('') + '</tr>';
+  for (const c of cubes)
+    h += `<tr><td class="k">${c.split('_')[0]} · ${c.split('_').pop()}</td>`
+       + ks.map(k => { const r = cell(c, k); return `<td class="${r&&r.held_out?'ho':''}">${r?r.ade_mm:'–'}</td>`; }).join('')
+       + '</tr>';
+  h += '<tr><td class="k"><b>mean</b></td>' + ks.map(k => {
+      const v = cubes.map(c => cell(c, k)).filter(Boolean).map(r => r.ade_mm);
+      return `<td data-v="1"><b>${v.length ? (v.reduce((a,b)=>a+b,0)/v.length).toFixed(1) : '–'}</b></td>`;
+    }).join('') + '</tr>';
+  const tb = document.getElementById('t_roll'); tb.innerHTML = h;
+  document.getElementById('n_stats').textContent = cubes.length;
   document.getElementById('note').innerHTML =
-    `All errors in mm, averaged over ${S.n_stats} validation episodes. † never trained. `
-    + `<b>Read the per-episode numbers in the viewers as one draw, not as the episode's score:</b> the pyramid `
-    + `sampler starts every chunk from fresh noise, and re-rolling a single episode with a different seed moves `
-    + `its ADE by 36–49%. Averaged over ${S.n_stats} episodes that noise falls to roughly ${(45/Math.sqrt(S.n_stats)).toFixed(0)}%, `
-    + `which is what the table reports. The one-shot arm is essentially seed-independent. `
-    + `Checkpoint step ${S.step.toLocaleString()}, ${S.points} points, ${S.context_len} context frames, `
-    + `${S.future_len} predicted frames per chunk.`;
+    `Rollout ADE in mm over a 400 ms horizon, ${cubes.length} held-out cube episodes, pyramid sampler at 25 `
+    + `steps. † never trained. <b>Each number is one draw, not the episode's score:</b> the pyramid starts every `
+    + `chunk from fresh noise, and re-rolling one episode with a different seed moves its ADE by 36-49%, so read `
+    + `the columns for their shape rather than their exact values. Checkpoint step ${S.step.toLocaleString()}, `
+    + `${S.points} points scored, ${S.context_len} context frames, ${S.future_len} predicted frames per chunk.`;
 }
+
 
 (async function(){
   S = await (await fetch('data/shellperf/summary.json'+V)).json();
   const epSel = document.getElementById('ep');
-  for (const e of S.episodes)
-    epSel.add(new Option(`${e.clip.split('_')[0]} · ${e.object} · ${e.scenario}`, e.clip));
-  EP = S.episodes[0].clip;
-  const sc = document.getElementById('sched');
-  for (const [l,v] of [['pyramid, 25 steps','pyramid'],['one shot','oneshot']]) sc.add(new Option(l, v));
-  const dt2 = document.getElementById('dt2');
-  for (const k of Object.keys(S.rollouts).map(Number).sort((a,b)=>a-b))
-    dt2.add(new Option((S.rollouts[k].pyramid||S.rollouts[k].oneshot).dt_ms + ' ms', String(k)));
+  const CUBES = S.episodes.filter(e => e.object === 'cube');
+  for (const e of CUBES)
+    epSel.add(new Option(`${e.clip.split('_')[0]} · ${e.scenario}`, e.clip));
+  EP = CUBES[0].clip;
   const sp = document.getElementById('sp');
   for (const [l,v] of [['1/4 speed',4],['1/8 speed',8],['1/16 speed',16]]) sp.add(new Option(l, v));
   sp.value = String(SPEED); sp.onchange = () => SPEED = +sp.value;
-  epSel.onchange = async () => { EP = epSel.value; await galleryDT(); await gallerySAMP(); };
-  sc.onchange = galleryDT; dt2.onchange = gallerySAMP;
+  epSel.onchange = async () => { EP = epSel.value; await galleryDT(); };
   table();
   requestAnimationFrame(loop);
-  await galleryDT(); await gallerySAMP();
+  await galleryDT();
 })();
 })();
 </script>
