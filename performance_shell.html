@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Rollout performance — c5f16 shell model</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
+  .wrap{position:relative; z-index:1; max-width:1440px}
+  .ttl{font-family:var(--serif); font-size:20px; font-weight:600; margin:32px 0 2px}
+  .ttl:first-child{margin-top:8px}
+  .ttl span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft); letter-spacing:.02em}
+  .ctl{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:10px 0 4px;
+       font-size:12.5px; color:var(--soft)}
+  .ctl select{font:inherit; font-size:12.5px; color:var(--ink); background:#fff; border:1px solid var(--line);
+              padding:3px 6px}
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin:12px 0 0; cursor:grab}
+  .grid:active{cursor:grabbing}
+  .tile{margin:0}
+  .tile .view{height:440px; border:1px solid var(--line); background:transparent}
+  .tile .view.ho{border-color:var(--s2)}
+  .tile figcaption{font-size:12px; color:var(--soft); margin:5px 1px 0}
+  .tile figcaption b{color:var(--ink); font-weight:600}
+  .tile figcaption .ho{color:var(--s2); font-weight:600}
+  td.k,th:first-child{text-align:left}
+  td.ho,th.ho{color:var(--s2)}
+  .note{font-size:13.5px; color:#333; margin:12px 0 0; line-height:1.55; max-width:80ch}
+  @media(max-width:820px){ .grid{grid-template-columns:1fr} .tile .view{height:330px} }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="wrap">
+  <p class="ttl">Autoregressive rollout at every step size
+    <span>5 context frames in, 16 predicted frames per chunk, chained to the same 400 ms</span></p>
+  <div class="ctl">
+    <label>episode <select id="ep"></select></label>
+    <label>sampler <select id="sched"></select></label>
+    <label>speed <select id="sp"></select></label>
+    <span class="leg" id="leg"></span>
+  </div>
+  <div class="grid" id="grid_dt"></div>
+
+  <p class="ttl">Pyramid vs one shot <span>same episode, same step size, the two samplers side by side</span></p>
+  <div class="ctl"><label>step size <select id="dt2"></select></label></div>
+  <div class="grid" id="grid_s"></div>
+
+  <p class="ttl">Error over the rollout <span>mean over <b id="n_stats">–</b> validation episodes, cube and sphere</span></p>
+  <table id="t_roll"></table>
+  <p class="note" id="note"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const V = '?t=' + Date.now();
+const GT_COL = '#b9b4ab', PYR = '#d4762c', ONE = '#1f5f8b', HO = '#c0392b', HORIZON = 400;
+let SPEED = 8, S = null, tiles = [], last = -1, EP = null;
+const disc = vizDisc(), clock = makeClock(() => SPEED, 600);
+
+const canvas = document.getElementById('bg');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
+camera.position.set(2.05, 1.25, 2.05);
+const controls = new THREE.OrbitControls(camera, document.body);
+addEventListener('pointerdown', e => { controls.enabled = !!e.target.closest('.view'); }, true);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.enableZoom = false; controls.enablePan = false;
+controls.maxPolarAngle = Math.PI/2 - 0.02; controls.target.set(0.5, 0.28, 0.5);
+
+function arena(H){
+  const s = new THREE.Scene();
+  const g = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); g.position.set(0.5,0,0.5); s.add(g);
+  const P = (a,b,c) => new THREE.Vector3(a,b,c);
+  s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0),P(1,0,0),P(1,0,1),P(0,0,1)]),
+       new THREE.LineBasicMaterial({color:0x444444})));
+  const up = new THREE.LineBasicMaterial({color:0xc4c4c4});
+  for (const [a,c] of [[0,0],[1,0],[1,1],[0,1]])
+    s.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(a,0,c),P(a,H,c)]), up));
+  return s;
+}
+function cloud(scene, col, size, n){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+  const p = new THREE.Points(geo, new THREE.PointsMaterial({size, map:disc, color:col,
+              transparent:true, alphaTest:0.4, sizeAttenuation:true}));
+  p.frustumCulled = false; scene.add(p); return geo;
+}
+function render(){
+  const cr = canvas.getBoundingClientRect(), pr = renderer.getPixelRatio();
+  const w = Math.round(cr.width), h = Math.round(cr.height);
+  if (canvas.width !== Math.floor(w*pr) || canvas.height !== Math.floor(h*pr)) renderer.setSize(w, h, false);
+  renderer.setScissorTest(false); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.setScissorTest(true); renderer.setClearColor(0xfbfaf8, 1);
+  for (const t of tiles){
+    const r = t.el.getBoundingClientRect();
+    if (r.bottom < cr.top || r.top > cr.bottom) continue;
+    const vx = r.left - cr.left, vy = cr.bottom - r.bottom;
+    renderer.setViewport(vx, vy, r.width, r.height);
+    renderer.setScissor(vx, vy, r.width, r.height);
+    camera.aspect = r.width/r.height; camera.updateProjectionMatrix();
+    renderer.render(t.scene, camera);
+  }
+  renderer.setScissorTest(false);
+}
+function loop(ts){
+  controls.update();
+  const ms = clock.tick(ts, true, HORIZON);
+  if (ms !== last){
+    last = ms;
+    for (const t of tiles){
+      const f = Math.min(t.m.n_frames-1, Math.floor(ms / t.m.dt_ms));
+      if (f === t.f) continue;
+      t.f = f;
+      for (const c of t.clouds){
+        const n = t.m.n_particles;
+        c.geo.attributes.position.array.set(c.data.subarray(f*n*3, f*n*3 + n*3));
+        c.geo.attributes.position.needsUpdate = true;
+      }
+    }
+  }
+  render(); requestAnimationFrame(loop);
+}
+
+const cache = new Map();
+async function bin(dir, name, m){
+  const k = dir + name;
+  if (cache.has(k)) return cache.get(k);
+  const raw = new Uint16Array(await (await fetch(`data/shellperf/roll/${dir}/${name}.bin`+V)).arrayBuffer());
+  const out = new Float32Array(raw.length), lo = m.q_lo, sc = m.q_scale/65535;
+  for (let i=0;i<raw.length;i++) out[i] = lo + raw[i]*sc;
+  cache.set(k, out); return out;
+}
+async function metaOf(dir){
+  const k = dir + 'meta';
+  if (!cache.has(k)) cache.set(k, await (await fetch(`data/shellperf/roll/${dir}/meta.json`+V)).json());
+  return cache.get(k);
+}
+async function tile(host, dir, cap, layers, hoBorder){
+  const fig = document.createElement('figure'); fig.className = 'tile';
+  fig.innerHTML = `<div class="view${hoBorder?' ho':''}"></div><figcaption>${cap}</figcaption>`;
+  host.appendChild(fig);
+  const m = await metaOf(dir), sc = arena(1.2), clouds = [];
+  for (const L of layers) clouds.push({geo: cloud(sc, L.color, L.size, m.n_particles), data: await bin(dir, L.bin, m)});
+  tiles.push({el: fig.querySelector('.view'), scene: sc, clouds, m, f: -1});
+}
+function clear(host){ tiles = tiles.filter(t => !host.contains(t.el)); host.innerHTML = ''; }
+
+async function galleryDT(){
+  const host = document.getElementById('grid_dt'); clear(host);
+  const sched = document.getElementById('sched').value;
+  const col = sched === 'pyramid' ? PYR : ONE;
+  document.getElementById('leg').innerHTML =
+    `<span style="background:${GT_COL}"></span>ground truth<span style="background:${col}"></span>model, ${sched}`;
+  const ks = Object.keys(S.grid[EP]).map(Number).sort((a,b)=>a-b);
+  for (const k of ks){
+    const r = S.grid[EP][k][sched]; if (!r) continue;
+    await tile(host, r.dir,
+      `<b>${r.dt_ms} ms</b> steps · ${Math.ceil(HORIZON/(16*r.dt_ms))} chunks · ${r.ade_mm} mm`
+      + (r.held_out ? ' · <span class="ho">never trained</span>' : ''),
+      [{bin:'gt', color:GT_COL, size:0.013}, {bin:sched, color:col, size:0.014}], r.held_out);
+  }
+}
+async function gallerySAMP(){
+  const host = document.getElementById('grid_s'); clear(host);
+  const k = document.getElementById('dt2').value;
+  for (const sched of ['pyramid','oneshot']){
+    const r = S.grid[EP][k] && S.grid[EP][k][sched]; if (!r) continue;
+    await tile(host, r.dir, `<b>${sched === 'pyramid' ? 'pyramid, 25 steps' : 'one shot'}</b> · ${r.dt_ms} ms · ${r.ade_mm} mm`,
+      [{bin:'gt', color:GT_COL, size:0.013},
+       {bin:sched, color:sched==='pyramid'?PYR:ONE, size:0.014}], r.held_out);
+  }
+}
+function table(){
+  const ks = Object.keys(S.rollouts).map(Number).sort((a,b)=>a-b);
+  const at = (r, ms) => { const j = Math.round(ms/r.dt_ms)-1;
+    return (j>=0 && j<r.per_frame_mm.length) ? r.per_frame_mm[j].toFixed(0) : '–'; };
+  let h = '<tr><th>step size</th><th>chunks</th><th>pyramid ADE</th><th>one-shot ADE</th>'
+        + '<th>pyramid @200 ms</th><th>pyramid @400 ms</th><th>one-shot @400 ms</th></tr>';
+  for (const k of ks){
+    const p = S.rollouts[k].pyramid, o = S.rollouts[k].oneshot;
+    const ho = p && p.held_out;
+    h += `<tr><td class="k${ho?' ho':''}">${(p||o).dt_ms} ms${ho?' †':''}</td><td>${(p||o).chunks}</td>`
+       + `<td class="${ho?'ho':''}">${p?p.ade_mm:'–'}</td><td class="${ho?'ho':''}">${o?o.ade_mm:'–'}</td>`
+       + `<td>${p?at(p,200):'–'}</td><td>${p?at(p,400):'–'}</td><td>${o?at(o,400):'–'}</td></tr>`;
+  }
+  document.getElementById('t_roll').innerHTML = h;
+  document.getElementById('n_stats').textContent = S.n_stats;
+  document.getElementById('note').innerHTML =
+    `All errors in mm, averaged over ${S.n_stats} validation episodes. † never trained. `
+    + `<b>Read the per-episode numbers in the viewers as one draw, not as the episode's score:</b> the pyramid `
+    + `sampler starts every chunk from fresh noise, and re-rolling a single episode with a different seed moves `
+    + `its ADE by 36–49%. Averaged over ${S.n_stats} episodes that noise falls to roughly ${(45/Math.sqrt(S.n_stats)).toFixed(0)}%, `
+    + `which is what the table reports. The one-shot arm is essentially seed-independent. `
+    + `Checkpoint step ${S.step.toLocaleString()}, ${S.points} points, ${S.context_len} context frames, `
+    + `${S.future_len} predicted frames per chunk.`;
+}
+
+(async function(){
+  S = await (await fetch('data/shellperf/summary.json'+V)).json();
+  const epSel = document.getElementById('ep');
+  for (const e of S.episodes)
+    epSel.add(new Option(`${e.clip.split('_')[0]} · ${e.object} · ${e.scenario}`, e.clip));
+  EP = S.episodes[0].clip;
+  const sc = document.getElementById('sched');
+  for (const [l,v] of [['pyramid, 25 steps','pyramid'],['one shot','oneshot']]) sc.add(new Option(l, v));
+  const dt2 = document.getElementById('dt2');
+  for (const k of Object.keys(S.rollouts).map(Number).sort((a,b)=>a-b))
+    dt2.add(new Option((S.rollouts[k].pyramid||S.rollouts[k].oneshot).dt_ms + ' ms', String(k)));
+  const sp = document.getElementById('sp');
+  for (const [l,v] of [['1/4 speed',4],['1/8 speed',8],['1/16 speed',16]]) sp.add(new Option(l, v));
+  sp.value = String(SPEED); sp.onchange = () => SPEED = +sp.value;
+  epSel.onchange = async () => { EP = epSel.value; await galleryDT(); await gallerySAMP(); };
+  sc.onchange = galleryDT; dt2.onchange = gallerySAMP;
+  table();
+  requestAnimationFrame(loop);
+  await galleryDT(); await gallerySAMP();
+})();
+})();
+</script>
+</body>
+</html>
