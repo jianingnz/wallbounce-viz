@@ -1,0 +1,1 @@
+{"run": "c2f6_cube \u2014 elastic cube shells, 2 GT frames -> 6 predicted, uniform dt 2.5-150 ms; through step 400 (full-precision wandb curves)", "r_delta": 0.0180602502822876, "train_loss": [[0, 0.03157811984419823], [100, 0.022315630689263344], [200, 0.01617574132978916], [300, 0.0175864789634943], [400, 0.013176252134144306]], "val_loss": [], "val_loss_ema": []}
