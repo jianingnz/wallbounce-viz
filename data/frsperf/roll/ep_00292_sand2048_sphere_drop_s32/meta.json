@@ -1,0 +1,1 @@
+{"clip": "ep_00292_sand2048_sphere_drop", "dt_ms": 80.0, "held_out": true, "n_frames": 7, "n_gt_frames": 7, "n_particles": 512, "context_len": 2, "q_lo": -0.01579076051712036, "q_scale": 0.9335695505142212, "ade_mm": 14.73, "fde_mm": 16.23, "scored_ms": 400.0, "per_frame_mm": [5.0, 10.6, 24.05, 17.75, 16.23], "variants": []}

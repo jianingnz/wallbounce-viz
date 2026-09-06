@@ -36,7 +36,7 @@
 <canvas id="bg"></canvas>
 <div class="wrap">
   <p class="ttl">Rollouts side by side
-    <span>episodes the model trained on, next to episodes it never saw — same step size, same 400 ms</span></p>
+    <span>episodes the model trained on, next to eval episodes it never saw — same step size, same 400 ms</span></p>
   <div class="ctl">
     <label>step size <select id="dt"></select></label>
     <label>speed <select id="sp"></select></label>
@@ -153,9 +153,9 @@ async function gallery(){
   document.getElementById('leg').innerHTML =
     `<span style="background:${GT_COL}"></span>ground truth`
     + `<span style="background:${css('--s3')}"></span>model, training episode`
-    + `<span style="background:${css('--s1')}"></span>model, held-out episode`;
+    + `<span style="background:${css('--s1')}"></span>model, eval episode`;
   for (const [base, D, cls, col, lab] of [['frsperf_train', TR, 'tr', css('--s3'), 'training episode'],
-                                          ['frsperf',  EV, 'ev', css('--s1'), 'held out']]){
+                                          ['frsperf',  EV, 'ev', css('--s1'), 'eval']]){
     for (const clip of Object.keys(D.grid).slice(0, N_TILE)){
       const r = D.grid[clip][k]; if (!r) continue;
       const fig = document.createElement('figure'); fig.className = 'tile';
@@ -176,7 +176,7 @@ function chart(id, legId, group, ylab){
   const H = svg.clientHeight || 280, L = 66, R = 18, Tp = 12, B = 30;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const ks = Object.keys(EV[group]).map(Number).filter(k=>!EV[group][k].held_out).sort((a,b)=>a-b);
-  const series = [{name:'training episodes', color:css('--s3'), D:TR}, {name:'held-out episodes', color:css('--s1'), D:EV}]
+  const series = [{name:'training episodes', color:css('--s3'), D:TR}, {name:'eval episodes', color:css('--s1'), D:EV}]
     .map(s => ({...s, pts: ks.filter(k=>s.D[group][k]).map(k => [s.D[group][k].dt_ms, s.D[group][k].ade_mm])}));
   const vals = series.flatMap(s => s.pts.map(p=>p[1]));
   const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
@@ -222,10 +222,10 @@ Promise.all([
   const row = (lab, get) => '<tr><td class="k">'+lab+'</td>' + ks.map(k=>`<td>${get(k)}</td>`).join('') + '</tr>';
   let h = '<tr><th>step size</th>' + ks.map(k=>`<th>${EV.rollouts[k].dt_ms} ms</th>`).join('') + '</tr>';
   h += row('window · training', k => TR.windows[k].ade_mm.toFixed(2));
-  h += row('window · held out', k => EV.windows[k].ade_mm.toFixed(2));
+  h += row('window · eval', k => EV.windows[k].ade_mm.toFixed(2));
   h += row('ratio', k => (EV.windows[k].ade_mm/TR.windows[k].ade_mm).toFixed(2));
   h += row('rollout · training', k => TR.rollouts[k].ade_mm.toFixed(1));
-  h += row('rollout · held out', k => EV.rollouts[k].ade_mm.toFixed(1));
+  h += row('rollout · eval', k => EV.rollouts[k].ade_mm.toFixed(1));
   h += row('ratio', k => (EV.rollouts[k].ade_mm/TR.rollouts[k].ade_mm).toFixed(2));
   document.getElementById('t').innerHTML = h;
 
@@ -234,7 +234,7 @@ Promise.all([
   const rR = mean(ks.map(k=>EV.rollouts[k].ade_mm/TR.rollouts[k].ade_mm));
   const worst = ks.reduce((a,k)=>Math.max(a, EV.rollouts[k].ade_mm/TR.rollouts[k].ade_mm), 0);
   document.getElementById('verdict').innerHTML =
-    `Across every trained step size, error on held-out episodes is <b>${rW.toFixed(2)}×</b> the `
+    `Across every trained step size, error on eval episodes is <b>${rW.toFixed(2)}×</b> the `
     + `training-episode error on a single window and <b>${rR.toFixed(2)}×</b> over a full 400 ms rollout; the `
     + `largest gap at any step size is ${worst.toFixed(2)}×. That is inside the spread between two samples of `
     + `${EV.n_stats} episodes, and the sign flips from rung to rung — so there is no measurable memorization `
