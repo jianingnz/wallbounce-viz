@@ -1,0 +1,1 @@
+{"clip": "ep_02286_shell2048_cube_slam", "dt_ms": 150.0, "held_out": false, "n_frames": 10, "n_gt_frames": 8, "n_particles": 512, "context_len": 2, "q_lo": 0.021026428788900375, "q_scale": 0.9402951635420322, "ade_mm": 235.34, "fde_mm": 300.31, "scored_ms": 900.0, "per_frame_mm": [106.76, 196.44, 278.59, 293.18, 236.73, 300.31], "variants": []}

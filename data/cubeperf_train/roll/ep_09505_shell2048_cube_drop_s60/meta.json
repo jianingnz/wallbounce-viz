@@ -1,0 +1,1 @@
+{"clip": "ep_09505_shell2048_cube_drop", "dt_ms": 150.0, "held_out": false, "n_frames": 10, "n_gt_frames": 8, "n_particles": 512, "context_len": 2, "q_lo": 0.01682397350668907, "q_scale": 0.9420783258974552, "ade_mm": 104.83, "fde_mm": 149.45, "scored_ms": 900.0, "per_frame_mm": [14.07, 52.01, 117.03, 149.0, 147.4, 149.45], "variants": []}
