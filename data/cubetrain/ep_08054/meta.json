@@ -1,0 +1,1 @@
+{"stem": "ep_08054", "scenario": "slam", "seed": 10054, "height": 0.8095, "speed0": 5.38, "spin0": 9.99, "contact_ms": 105.0, "n_frames": 120, "n_particles": 512, "dt": 0.01, "dt_sim": 0.0025, "stride": 4, "q_lo": 0.012766320258378983, "q_scale": 0.9704165868461132, "arena": {"size": 1.0, "wall_height": 1.2}}
