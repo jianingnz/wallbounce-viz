@@ -1,0 +1,1 @@
+{"clip": "ep_00290_shell2048_cube_wall", "dt_ms": 100.0, "held_out": false, "n_frames": 14, "n_gt_frames": 12, "n_particles": 512, "context_len": 2, "q_lo": 0.01736876741051674, "q_scale": 0.9485289715230465, "ade_mm": 115.61, "fde_mm": 152.96, "scored_ms": 1000.0, "per_frame_mm": [5.05, 36.32, 80.15, 124.7, 143.33, 152.9, 152.4, 155.58, 152.72, 152.96], "variants": []}
