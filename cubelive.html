@@ -30,7 +30,7 @@
   <p class="caption">Mean particle error over the predicted window, val episodes. The error grows with the step because the window reaches further in time — 2 frames at 150 ms spans 300 ms of physics, 60× the 2.5 ms window.</p>
 
   <h2>Whole episode, per step size</h2>
-  <p class="sub" style="font-size:15px">Only the first 2 ground-truth frames are given; the model then predicts forward, each 2-frame chunk re-anchored on its own output, until it reaches a <b>common 400 ms horizon</b> — the same physical span for every step size, so the columns compare like with like. A coarse step may overshoot the end of the episode; those frames are still predicted but not scored, and the final-frame error is taken at the last frame that still has ground truth. Each chunk is produced by a single forward pass (one-shot at t = 999), the sampler that measured best for chained prediction in the earlier big-step-vs-AR study.</p>
+  <p class="sub" style="font-size:15px">Only the first 2 ground-truth frames are given; the model then predicts forward, each 6-frame chunk re-anchored on its own output, until it reaches the <b>end of the 1.2 s clip</b> — the same physical span for every step size, so the columns compare like with like. A coarse step may overshoot the end of the episode; those frames are still predicted but not scored, and the final-frame error is taken at the last frame that still has ground truth. Each chunk is produced three ways: a single forward pass (one shot at t = 999), 25 denoising steps, and 25 steps with the pyramid schedule. Use the sampler selector below to switch between them.</p>
   <svg id="c_roll" style="height:250px"></svg>
   <div class="leg" id="l_roll"></div>
   <table id="t_roll"></table>
@@ -49,7 +49,7 @@
     <div class="lbl l"><b>ground truth</b></div><div class="lbl r" style="color:var(--s2)"><b>prediction</b> <span id="e_now" class="pill"></span></div></div>
   <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="10" value="0" step="1"><span class="mono" id="frame"></span><button id="ovl">GT → prediction vectors</button></div>
   <p class="caption" id="excap"></p>
-  <p class="caption"><b>mean vs sample.</b> The model predicts the clean future directly, so <b>one forward pass</b> returns E[x₀ | context] — the conditional mean, which is the best possible answer under a distance metric. Running the flow ODE for <b>25 steps</b> instead draws one specific outcome from the predicted distribution: sharper and physically self-consistent, but scored slightly worse, and two draws differ from each other by as much as 8&nbsp;mm at 150&nbsp;ms. That disagreement is the model's own uncertainty. Available at 10, 40 and 150&nbsp;ms.</p>
+  <p class="caption"><b>one shot collapses the object.</b> A single pass returns E[x₀ | context], the conditional mean, which is optimal under a distance metric — but averaging over the poses the cube <i>might</i> be in shrinks the point cloud toward its centroid. Measured against the true object, the one-shot cloud is 0.75× its real size at 40 ms and <b>0.56× at 100 ms</b>. Running the flow ODE for <b>25 steps</b> draws one specific outcome instead of the average, and the cube stays full size at every rate (0.93–1.01×). At the coarse rates the sampled arms are also more accurate, so above ~20 ms the extra 25× cost is worth it. All three arms are available at every step size.</p>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -130,7 +130,8 @@ document.getElementById('play').onclick=function(){playing=!playing;this.textCon
 document.getElementById('ovl').onclick=function(){ovOn=!ovOn;this.classList.toggle('active',ovOn);ov.setVisible(ovOn);setFrame(frame);};
 document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='Play';setFrame(+this.value);clock.set(frame*dtms);};
  function paintSrc(){const sr=document.getElementById('ex_src');sr.innerHTML='';
-   const opts=[['pred','mean · 1 step',meta?meta.ade_mm:null]].concat(((meta&&meta.samples)||[]).map((sm,i)=>[sm.name,`sample ${i+1} · 25 steps`,sm.ade_mm]));
+   const NM={'25step':'25 steps','pyramid':'25 steps · pyramid'};
+   const opts=[['pred','one shot · 1 step',meta?meta.ade_mm:null]].concat(((meta&&meta.samples)||[]).map(sm=>[sm.name,NM[sm.name]||sm.name,sm.ade_mm]));
    if(opts.length<2){sr.style.display='none';return;} sr.style.display='';
    opts.forEach(([f,lab,ade])=>{const b=document.createElement('button');
      b.textContent=ade!=null?`${lab} · ${ade.toFixed(0)} mm`:lab;
