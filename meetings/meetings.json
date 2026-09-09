@@ -53,6 +53,10 @@
      "src": "../sandtrain.html"
     },
     {
+     "label": "Samplers x \u0394t on the training set",
+     "src": "../dtsampler.html"
+    },
+    {
      "label": "\u0394t model (live training)",
      "src": "../frslive.html"
     },
