@@ -53,7 +53,7 @@
      "src": "../sandtrain.html"
     },
     {
-     "label": "Samplers x \u0394t on the training set",
+     "label": "Cube: samplers x \u0394t on the training set",
      "src": "../dtsampler.html"
     },
     {
