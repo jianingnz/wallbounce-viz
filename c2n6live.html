@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Δt model (2.5–50 ms, N=6) — live</title>
+<link rel="stylesheet" href="site.css?v=20260903">
+<style>
+  svg{display:block;width:100%}
+  #stage{height:470px;position:relative} #stage canvas{width:100%;height:100%;display:block}
+  .lbl{position:absolute;top:8px} .lbl.l{left:10px} .lbl.r{left:calc(50% + 10px)}
+  .pill{font-size:12px;color:var(--soft)} td.ho{color:var(--s2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2 style="margin-top:4px">Δt-conditioned sand model — training in progress</h2>
+  <p class="sub" id="status">loading…</p>
+
+  <h2>Curves</h2>
+  <div class="charts">
+    <div><svg id="c_tr" style="height:210px"></svg><div class="leg" id="l_tr"></div><p class="caption">Training loss (log)</p></div>
+    <div><svg id="c_val" style="height:210px"></svg><div class="leg" id="l_val"></div><p class="caption">Validation loss (log) — live and EMA weights</p></div>
+  </div>
+
+  <h2>One window, per step size</h2>
+  <p class="sub" style="font-size:15px">2 ground-truth frames in, 2 frames predicted at that step size. † = never trained (interpolation probe).</p>
+  <svg id="c_win" style="height:250px"></svg>
+  <table id="t_win"></table>
+  <p class="caption">Mean particle error over the predicted window, val episodes. The error grows with the step because the window reaches further in time — 2 frames at 150 ms spans 300 ms of physics, 60× the 2.5 ms window.</p>
+
+  <h2>Whole episode, per step size</h2>
+  <p class="sub" style="font-size:15px">Only the first 2 ground-truth frames are given; the model then predicts forward, each 2-frame chunk re-anchored on its own output, until it reaches a <b>common 400 ms horizon</b> — the same physical span for every step size, so the columns compare like with like. A coarse step may overshoot the end of the episode; those frames are still predicted but not scored, and the final-frame error is taken at the last frame that still has ground truth. Each chunk is produced by a single forward pass (one-shot at t = 999), the sampler that measured best for chained prediction in the earlier big-step-vs-AR study.</p>
+  <svg id="c_roll" style="height:250px"></svg>
+  <div class="leg" id="l_roll"></div>
+  <table id="t_roll"></table>
+  <h2 id="pin_h" hidden>Stress case — corner splash</h2>
+  <p class="sub" id="pin_sub" hidden style="font-size:15px"></p>
+  <svg id="c_pin" style="height:220px" hidden></svg><div class="leg" id="l_pin"></div>
+  <p class="caption" id="pin_cap" hidden>A wall-throw that splashes into a corner: two wall planes and the floor engage at once — the hardest physics in this corpus, and the place where the nearest-wall feature's argmin switches between walls. Tracked at every checkpoint since it was flagged.</p>
+  <h2>Four scenarios × every step size</h2>
+  <p class="sub" style="font-size:15px">The same four episodes — a corner splash, a wall throw, a drop and a slam — each predicted from 2 ground-truth frames all the way to the end of the episode, at every step size in the ladder. Rollout ADE in mm; blank = the episode is too short to hold a window at that step.</p>
+  <table id="t_grid"></table>
+  <p class="caption">Lower is better; the best step size for each scenario is highlighted. Every column covers the same 400 ms of physics, so the differences are the step size alone: fine steps need up to 80 chained chunks and accumulate drift, while coarse steps get there in two or three predictions but each one is harder.</p>
+  <div class="ex" id="ex_scn"></div>
+  <div class="ex" id="ex_dt" style="margin-top:-4px"></div>
+  <div class="ex" id="ex_src" style="margin-top:-4px"></div>
+  <div id="stage"><canvas id="c"></canvas>
+    <div class="lbl l"><b>ground truth</b></div><div class="lbl r" style="color:var(--s2)"><b>prediction</b> <span id="e_now" class="pill"></span></div></div>
+  <div class="ctl"><button id="play">Pause</button><input type="range" id="scrub" min="0" max="10" value="0" step="1"><span class="mono" id="frame"></span><button id="ovl">GT → prediction vectors</button></div>
+  <p class="caption" id="excap"></p>
+  <p class="caption"><b>mean vs sample.</b> The model predicts the clean future directly, so <b>one forward pass</b> returns E[x₀ | context] — the conditional mean, which is the best possible answer under a distance metric. Running the flow ODE for <b>25 steps</b> instead draws one specific outcome from the predicted distribution: sharper and physically self-consistent, but scored slightly worse, and two draws differ from each other by as much as 8&nbsp;mm at 150&nbsp;ms. That disagreement is the model's own uncertainty. Available at 10, 40 and 150&nbsp;ms.</p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+(function(){
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let S=null, curves=null, meta=null, gt=null, pr=null, N=1024, T=1, frame=0, playing=true, dtms=5, ovOn=false;
+
+function logChart(id,legId,series,xmax){const svg=document.getElementById(id);const W=Math.max(svg.clientWidth,340),H=210,L=56,R=12,Tp=8,B=24;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const vals=series.flatMap(s=>s.pts.map(p=>p[1])).filter(v=>v>0);if(!vals.length){svg.innerHTML='';return;}
+ const lo=Math.pow(10,Math.floor(Math.log10(Math.min(...vals)))),hi=Math.pow(10,Math.ceil(Math.log10(Math.max(...vals))));
+ const X=s=>L+(W-L-R)*s/xmax,Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));let g='';
+ for(let d=lo;d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d.toExponential(0)}</text>`;
+ for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*xmax)}" y="${H-6}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
+ for(const s of series)g+=`<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="1.8"/>`;
+ svg.innerHTML=g;document.getElementById(legId).innerHTML=series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('');}
+
+function winChart(){const svg=document.getElementById('c_win');const W=Math.max(svg.clientWidth,360),H=250,L=60,R=14,Tp=10,B=30;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const ks=Object.keys(S.windows).map(Number).sort((a,b)=>a-b);
+ const xs=ks.map(k=>S.windows[k].dt_ms),ys=ks.map(k=>S.windows[k].ade_mm);
+ const xmax=Math.max(...xs),lo=Math.max(0.05,Math.min(...ys)/2),hi=Math.max(...ys)*2;
+ const X=v=>L+(W-L-R)*v/xmax,Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));let g='';
+ for(let d=Math.pow(10,Math.floor(Math.log10(lo)));d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+ for(const t of [0,50,100,150])g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${t} ms</text>`;
+ g+=`<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})" text-anchor="middle">window error (mm)</text>`;
+ g+=`<path d="${ks.map((k,i)=>(i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(ys[i]).toFixed(1)).join('')}" fill="none" stroke="${css('--s1')}" stroke-width="2"/>`;
+ ks.forEach((k,i)=>{const ho=S.windows[k].held_out;g+=`<circle cx="${X(xs[i])}" cy="${Y(ys[i])}" r="${ho?5:3.5}" fill="${ho?css('--s2'):css('--s1')}"/>`;});
+ svg.innerHTML=g;
+ let h='<tr><th>step size</th>'+ks.map(k=>`<th>${S.windows[k].dt_ms}${S.windows[k].held_out?' †':''}</th>`).join('')+'</tr><tr><td>window ADE (mm)</td>'+
+   ks.map(k=>`<td class="${S.windows[k].held_out?'ho':''}">${S.windows[k].ade_mm.toFixed(2)}</td>`).join('')+'</tr>';
+ document.getElementById('t_win').innerHTML=h;}
+
+function rollChart(){const svg=document.getElementById('c_roll');const W=Math.max(svg.clientWidth,360),H=250,L=60,R=14,Tp=10,B=30;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H}`);const ks=Object.keys(S.rollouts).map(Number).sort((a,b)=>a-b);
+ const C=[css('--s1'),css('--s3'),css('--s4'),css('--s2')];
+ const tmax=Math.max(...ks.map(k=>S.rollouts[k].horizon_ms||400));
+ const all=ks.flatMap(k=>S.rollouts[k].per_frame_mm).filter(v=>v>0);
+ const lo=Math.max(0.1,Math.min(...all)/2),hi=Math.max(...all)*1.6;
+ const X=t=>L+(W-L-R)*t/tmax,Y=v=>Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));let g='';
+ for(let d=Math.pow(10,Math.floor(Math.log10(lo)));d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+ for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*tmax)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*tmax)} ms</text>`;
+ g+=`<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})" text-anchor="middle">rollout error (mm)</text>`;
+ ks.forEach((k,i)=>{const r=S.rollouts[k];g+=`<path d="${r.per_frame_mm.map((v,j)=>(j?'L':'M')+X((j+1)*r.dt_ms).toFixed(1)+' '+Y(v).toFixed(1)).join('')}" fill="none" stroke="${C[i%4]}" stroke-width="2"/>`;});
+ svg.innerHTML=g;
+ document.getElementById('l_roll').innerHTML=ks.map((k,i)=>`<span style="background:${C[i%4]}"></span>${S.rollouts[k].dt_ms} ms steps`).join('');
+ let h='<tr><th>step size</th><th>chunks to the horizon</th><th>predicted</th><th>rollout ADE (mm)</th><th>error at last GT frame (mm)</th></tr>';
+ for(const k of ks){const r=S.rollouts[k];h+=`<tr><td>${r.dt_ms} ms</td><td>${Math.ceil((r.predicted_ms||400)/(2*r.dt_ms))}</td><td>${r.predicted_ms||''} ms</td><td data-v="1">${r.ade_mm.toFixed(1)}</td><td data-v="1">${r.fde_mm.toFixed(1)}</td></tr>`;}
+ const tb=document.getElementById('t_roll');tb.innerHTML=h;markBest(tb,[3,4]);}
+
+// ---- 3D rollout viewer
+const canvas=document.getElementById('c');const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setScissorTest(true);const sprite=vizDisc();
+function mk(col){const sc=new THREE.Scene();sc.background=new THREE.Color('#fbfaf8');const geo=new THREE.BufferGeometry();
+ const p=new THREE.Points(geo,new THREE.PointsMaterial({size:0.015,map:sprite,color:col,transparent:true,alphaTest:0.35,sizeAttenuation:true}));
+ p.frustumCulled=false;sc.add(p);
+ const eg=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1.2,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));
+ eg.position.set(0.5,0.6,0.5); sc.add(eg);   // r128: Object3D.position is read-only, must .set()
+ const gr=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);gr.position.set(0.5,0,0.5);sc.add(gr);return {scene:sc,geo};}
+const V_gt=mk(0x1f5f8b),V_pr=mk(0xd4762c);const ov=makeOverlay(V_pr.scene,sprite,0.01);
+const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.7,1.15,1.85);
+const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0.5,0.35,0.5);controls.enableDamping=true;
+const getSpeed=makeSpeed(document.getElementById('play').parentElement);const clock=makeClock(getSpeed);
+function setFrame(f){if(!gt)return;frame=f;
+ V_gt.geo.attributes.position.array.set(gt.subarray(f*N*3,(f+1)*N*3));V_gt.geo.attributes.position.needsUpdate=true;
+ V_pr.geo.attributes.position.array.set(pr.subarray(f*N*3,(f+1)*N*3));V_pr.geo.attributes.position.needsUpdate=true;
+ ov.update(gt,pr,f,f,N);
+ document.getElementById('scrub').value=f;
+ document.getElementById('frame').textContent=`physics t = ${(f*dtms/1000).toFixed(2)} s`;
+ const k=f-meta.context_len;document.getElementById('e_now').textContent=k>=0&&meta.per_frame_mm[k]!==undefined?`· err ${meta.per_frame_mm[k].toFixed(1)} mm`:'· context';}
+function render(){const w=canvas.clientWidth,h=canvas.clientHeight,half=Math.floor(w/2);if(!w||!h)return;
+ const pr_=renderer.getPixelRatio();if(canvas.width!==Math.floor(w*pr_)||canvas.height!==Math.floor(h*pr_))renderer.setSize(w,h,false);
+ camera.aspect=half/h;camera.updateProjectionMatrix();
+ renderer.setViewport(0,0,half,h);renderer.setScissor(0,0,half,h);renderer.render(V_gt.scene,camera);
+ renderer.setViewport(half,0,w-half,h);renderer.setScissor(half,0,w-half,h);renderer.render(V_pr.scene,camera);}
+function loop(ts){controls.update();if(gt){const f=Math.min(T-1,Math.round(clock.tick(ts,playing,(T-1)*dtms)/dtms));if(f!==frame)setFrame(f);}render();requestAnimationFrame(loop);}
+document.getElementById('play').onclick=function(){playing=!playing;this.textContent=playing?'Pause':'Play';};
+document.getElementById('ovl').onclick=function(){ovOn=!ovOn;this.classList.toggle('active',ovOn);ov.setVisible(ovOn);setFrame(frame);};
+document.getElementById('scrub').oninput=function(){playing=false;document.getElementById('play').textContent='Play';setFrame(+this.value);clock.set(frame*dtms);};
+ function paintSrc(){const sr=document.getElementById('ex_src');sr.innerHTML='';
+   const opts=[['pred','mean · 1 step',meta?meta.ade_mm:null]].concat(((meta&&meta.samples)||[]).map((sm,i)=>[sm.name,`sample ${i+1} · 25 steps`,sm.ade_mm]));
+   if(opts.length<2){sr.style.display='none';return;} sr.style.display='';
+   opts.forEach(([f,lab,ade])=>{const b=document.createElement('button');
+     b.textContent=ade!=null?`${lab} · ${ade.toFixed(0)} mm`:lab;
+     b.className=(f===curSrc?'active':'');
+     b.onclick=()=>{curSrc=f;paintSrc();loadPred(f);};sr.appendChild(b);});}
+async function loadPred(field){const v='?t='+Date.now();
+ const buf=await fetch(`data/c2n6live/roll/${curName}/${field}.bin${v}`).then(r=>r.arrayBuffer());
+ const u=new Uint16Array(buf);pr=new Float32Array(u.length);for(let i=0;i<u.length;i++)pr[i]=u[i]/65535*meta.q_scale+meta.q_lo;
+ setFrame(Math.min(frame,T-1));}
+let curName=null,curSrc='pred';
+async function loadEx(name){curName=name;curSrc='pred';const v='?t='+Date.now();meta=await (await fetch(`data/c2n6live/roll/${name}/meta.json${v}`)).json();
+ const dq=b=>{const u=new Uint16Array(b),f=new Float32Array(u.length);for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;};
+ const [g,p]=await Promise.all([fetch(`data/c2n6live/roll/${name}/gt.bin${v}`).then(r=>r.arrayBuffer()),fetch(`data/c2n6live/roll/${name}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
+ gt=dq(g);pr=dq(p);N=meta.n_particles;T=meta.n_frames;dtms=meta.dt_ms;
+ for(const V of [V_gt,V_pr])V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));
+ ov.alloc(N);document.getElementById('scrub').max=T-1;
+ document.getElementById('excap').textContent=`${meta.clip} · ${meta.dt_ms} ms steps · ${meta.n_frames} frames from 2 GT context frames · rollout ADE ${meta.ade_mm} mm, final frame ${meta.fde_mm} mm`;
+ frame=-1;clock.set(0);setFrame(0);playing=true;document.getElementById('play').textContent='Pause';paintSrc();}
+function gridTable(){const g=S.grid||{};const labs=Object.keys(g);if(!labs.length)return;
+ const ks=[...new Set(labs.flatMap(l=>Object.keys(g[l]).map(Number)))].sort((a,b)=>a-b);
+ const NAME={corner:'corner splash',wall:'wall throw',drop:'drop',slam:'slam'};
+ let h='<tr><th>scenario</th>'+ks.map(k=>`<th>${k*2.5} ms</th>`).join('')+'</tr>';
+ for(const l of labs){h+=`<tr><td>${NAME[l]||l}</td>`+ks.map(k=>g[l][k]?`<td data-v="1">${g[l][k].ade_mm.toFixed(0)}</td>`:'<td></td>').join('')+'</tr>';}
+ const tb=document.getElementById('t_grid');tb.innerHTML=h;
+ [...tb.rows].slice(1).forEach(r=>{let best=null,bv=Infinity;
+   [...r.cells].slice(1).forEach(c=>{const v=parseFloat(c.textContent);if(!isNaN(v)&&v<bv){bv=v;best=c;}});
+   if(best)best.classList.add('best');});}
+
+function pinChart(H){const rows=H.filter(h=>Object.keys(h.pinned||{}).length);if(rows.length<1)return;
+ const last=rows[rows.length-1].pinned;const clip=('corner' in last)?'corner':Object.keys(last)[0];
+ const ks=Object.keys(last[clip]).map(Number).sort((a,b)=>a-b);
+ const C=[css('--s1'),css('--s3'),css('--s4'),css('--s2'),'#8a6d3b','#4a7c59','#7a5aa6','#c0392b'];
+ for(const id of ['pin_h','pin_sub','c_pin','pin_cap'])document.getElementById(id).hidden=false;
+ document.getElementById('pin_sub').textContent=`${S.showcase?(S.showcase.find(x=>x.label===clip)||{}).clip||clip:clip} — rollout error from 2 GT frames, tracked across checkpoints`;
+ const svg=document.getElementById('c_pin');const W=Math.max(svg.clientWidth,360),H2=220,L=60,R=14,Tp=10,B=28;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H2}`);
+ const xs=rows.map(r=>r.step),xmax=Math.max(200000,...xs);
+ const all=rows.flatMap(r=>ks.map(k=>r.pinned[clip][k]).filter(v=>v));
+ const lo=Math.max(1,Math.min(...all)/1.6),hi=Math.max(...all)*1.4;
+ const X=v=>L+(W-L-R)*v/xmax,Y=v=>Tp+(H2-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+ let g='';for(let d=Math.pow(10,Math.floor(Math.log10(lo)));d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-6}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d}</text>`;
+ for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*xmax)}" y="${H2-8}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
+ g+=`<text x="14" y="${Tp+(H2-Tp-B)/2}" font-size="11" fill="#666" transform="rotate(-90 14 ${Tp+(H2-Tp-B)/2})" text-anchor="middle">rollout error (mm)</text>`;
+ ks.forEach((k,i)=>{const pts=rows.filter(r=>r.pinned[clip]&&r.pinned[clip][k]).map(r=>[r.step,r.pinned[clip][k]]);
+  g+=`<path d="${pts.map((p,j)=>(j?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${C[i%4]}" stroke-width="2"/>`;
+  pts.forEach(p=>{g+=`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3" fill="${C[i%4]}"/>`;});});
+ svg.innerHTML=g;
+ document.getElementById('l_pin').innerHTML=ks.map((k,i)=>`<span style="background:${C[i%4]}"></span>${k*2.5} ms steps`).join('');}
+
+(async()=>{
+ S=await (await fetch('data/c2n6live/summary.json?t='+Date.now())).json();
+ let HIST=[];try{HIST=await (await fetch('data/c2n6live/history.json?t='+Date.now())).json();}catch(e){}
+ try{curves=await (await fetch('data/curves_c2n6.json?t='+Date.now())).json();}catch(e){}
+ document.getElementById('status').textContent=`${S.run} — step ${S.step.toLocaleString()} of 200,000 · context ${S.context_len} frames → ${S.future_len} predicted · updated ${S.updated}`;
+ if(curves){const xm=200000;
+   logChart('c_tr','l_tr',[{name:'train',color:css('--s1'),pts:curves.train_loss}].concat(curves.train_loss_ema?[{name:'train · EMA',color:css('--s3'),pts:curves.train_loss_ema}]:[]),xm);
+   logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}
+ winChart();rollChart();try{pinChart(HIST);}catch(e){}
+ gridTable();
+ const labs=Object.keys(S.grid||{});let curLab=labs[0],curS=null;
+ const scn=document.getElementById('ex_scn'),dtr=document.getElementById('ex_dt');
+ const NAME={corner:'corner splash',wall:'wall throw',drop:'drop',slam:'slam'};
+ function paintDt(){dtr.innerHTML='';const byS=S.grid[curLab];
+   Object.keys(byS).map(Number).sort((a,b)=>a-b).forEach((k,i)=>{const v=byS[k];
+     const b=document.createElement('button');b.textContent=`${v.dt_ms} ms · ${v.ade_mm.toFixed(0)} mm`;
+     if(curS===null&&i===0)curS=String(k);
+     b.className=String(k)===String(curS)?'active':'';
+     b.onclick=()=>{curS=String(k);paintDt();loadEx(byS[k].name);};dtr.appendChild(b);});}
+ labs.forEach(lab=>{const b=document.createElement('button');b.textContent=NAME[lab]||lab;
+   b.className=lab===curLab?'active':'';
+   b.onclick=()=>{curLab=lab;scn.querySelectorAll('button').forEach(x=>x.className='');b.className='active';
+     const ks=Object.keys(S.grid[lab]).map(Number).sort((a,b)=>a-b);
+     if(!S.grid[lab][curS])curS=String(ks[0]);paintDt();loadEx(S.grid[lab][curS].name);};scn.appendChild(b);});
+ paintDt();
+ if(labs.length)await loadEx(S.grid[curLab][curS].name);
+ requestAnimationFrame(loop);addEventListener('resize',()=>{winChart();rollChart();if(curves){const xm=200000;
+   logChart('c_tr','l_tr',[{name:'train',color:css('--s1'),pts:curves.train_loss}],xm);
+   logChart('c_val','l_val',[{name:'val · live',color:css('--s2'),pts:curves.val_loss},{name:'val · EMA',color:css('--s3'),pts:curves.val_loss_ema}],xm);}});
+})();
+})();
+</script>
+</body>
+</html>
