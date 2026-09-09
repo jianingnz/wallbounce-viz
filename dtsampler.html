@@ -7,23 +7,35 @@
 <title>Samplers on the training set</title>
 <link rel="stylesheet" href="site.css?v=20260902">
 <style>
+  #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
+  .wrap{position:relative; z-index:1}
   .chart svg{display:block; width:100%; height:auto; overflow:visible}
   .lg{display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:12.5px; color:var(--soft); margin:6px 0 0}
-  .lg i{display:inline-block; width:16px; height:3px; margin-right:6px; vertical-align:3px; border-radius:2px}
+  .lg i{display:inline-block; width:18px; height:0; border-top:3px solid; margin-right:6px; vertical-align:4px}
   .lg b{color:var(--ink); font-weight:600}
   table.s td.num, table.s th.num{text-align:right; font-variant-numeric:tabular-nums}
   table.s td:first-child, table.s th:first-child{text-align:left}
   table.s tr.held td{color:var(--soft); font-style:italic}
   table.s td.best{font-weight:700}
   .note{font-size:12.5px; color:var(--soft); margin:8px 0 0; line-height:1.5}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:10px 0 4px; cursor:grab}
+  .grid3:active{cursor:grabbing}
+  .tile{margin:0}
+  .tile .view{height:280px; border:1px solid var(--line); background:transparent}
+  .tile figcaption{font-size:12px; color:var(--soft); margin:6px 1px 0; line-height:1.4}
+  .tile figcaption b{color:var(--ink); font-weight:600; font-size:12.5px}
+  .pick{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:14px 0 2px}
+  .pick select{font:inherit; font-size:13px; padding:5px 8px; border:1px solid #bbb; border-radius:3px; background:#fff; color:var(--ink)}
+  .pick label{font-size:12px; color:var(--soft); margin-left:6px}
+  @media(max-width:900px){ .grid3{grid-template-columns:1fr} .tile .view{height:240px} }
 </style>
 </head>
 <body>
+<canvas id="bg"></canvas>
 <div class="wrap">
   <h1>How well does it reproduce what it was trained on?</h1>
-  <p class="sub" id="lede">Autoregressive rollouts of <b>training</b> episodes the model has already seen, at every
-  step size it was trained on, under all three inference schemes. The held-out split is shown beside it: if the model
-  had memorised its training data the two panels would differ.</p>
+  <p class="sub">Autoregressive rollouts of <b>training</b> episodes the model has already seen, at every step size it
+  was trained on, next to the held-out split. Two inference schemes: a single denoising step, and the full 25.</p>
 
   <div class="chart" id="chart"></div>
   <div class="lg" id="legend"></div>
@@ -32,99 +44,210 @@
   <h2>Rollout error, millimetres</h2>
   <div id="tablewrap"></div>
   <p class="note" id="foot"></p>
+
+  <h2>The same rollouts in 3D</h2>
+  <p>Truth beside both predictions, from training episodes. A single denoising step returns the conditional mean, so
+  the thing to check is whether it quietly <em>shrinks</em> the object — on the cube model it collapses to 0.45× true
+  size at 150 ms. Measured here, it does not: the sand predictions stay within 2 % of the truth's size at every step
+  size, for both samplers. On this model the two really are interchangeable, in shape as well as in error.</p>
+  <div class="pick" id="pick"></div>
+  <div class="grid3" id="grid3"></div>
+  <p class="note" id="note3d"></p>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
 <script>
 (function(){
-  // CVD-validated trio (worst-pair protan/deutan ΔE 8.1, normal-vision 16.2, contrast ≥ 4.1:1)
-  const COL = {'one-shot': '#0072B2', '25-step': '#a86f00', 'pyramid-25': '#b1567f'};
-  const ORDER = ['one-shot', '25-step', 'pyramid-25'];
+  // two series only; CVD-checked pair (protan/deutan ΔE 20+, contrast 5.0 / 4.1 : 1)
+  const COL = {'one-shot': '#0072B2', '25-step': '#a86f00'};
+  const ORDER = ['one-shot', '25-step'];
+  const SAND = '#d3a15a', GTCOL = '#7a7770';
   const v = '?t=' + Date.now();
   const fmt = x => x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
+  const disc = vizDisc();
 
-  function panel(S, x0, W, H, PAD, dom, title, showY){
-    const {xs, ys} = dom;
+  // ---------- chart: one panel, both splits, colour = sampler, dashed = held-out split ----------
+  function draw(A, B){
+    const W = 1080, H = 330, PAD = {l: 56, r: 96, t: 24, b: 38};
     const iw = W - PAD.l - PAD.r, ih = H - PAD.t - PAD.b;
-    const X = d => PAD.l + (Math.log10(d) - xs[0]) / (xs[1] - xs[0]) * iw;
-    const Y = e => PAD.t + (1 - (Math.log10(e) - ys[0]) / (ys[1] - ys[0])) * ih;
-    let g = `<g transform="translate(${x0},0)">`;
-    // recessive grid: decades on y, the ladder rungs on x
-    for (let p = Math.ceil(ys[0]); p <= Math.floor(ys[1]); p++){
-      for (const m of [1, 2, 5]){
-        const val = m * Math.pow(10, p); if (Math.log10(val) < ys[0] || Math.log10(val) > ys[1]) continue;
-        g += `<line x1="${PAD.l}" y1="${Y(val)}" x2="${PAD.l + iw}" y2="${Y(val)}" stroke="${m === 1 ? '#e2e2e2' : '#f0f0f0'}" stroke-width="1"/>`;
-        if (showY) g += `<text x="${PAD.l - 7}" y="${Y(val) + 3.5}" text-anchor="end" font-size="10.5" fill="#666">${val >= 1 ? val : val}</text>`;
+    const series = [];
+    for (const n of ORDER){
+      for (const [S, split] of [[A, 'train'], [B, 'eval']]){
+        if (!S || !S.results[n]) continue;
+        series.push({name: n, split, pts: Object.values(S.results[n]).map(a => ({d: a.dt_ms, e: a.ade_mm, held: a.held_out})).sort((p, q) => p.d - q.d)});
       }
     }
+    const es = series.flatMap(s => s.pts.map(p => p.e)), ds = series.flatMap(s => s.pts.map(p => p.d));
+    const xs = [Math.log10(Math.min(...ds) * 0.85), Math.log10(Math.max(...ds) * 1.10)];
+    const ys = [Math.log10(Math.min(...es) * 0.85), Math.log10(Math.max(...es) * 1.18)];
+    const X = d => PAD.l + (Math.log10(d) - xs[0]) / (xs[1] - xs[0]) * iw;
+    const Y = e => PAD.t + (1 - (Math.log10(e) - ys[0]) / (ys[1] - ys[0])) * ih;
+    let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rollout error against step size for one-shot and 25-step sampling, on the training split and the held-out split">`;
+    for (let p = Math.ceil(ys[0]) - 1; p <= Math.floor(ys[1]) + 1; p++)
+      for (const m of [1, 2, 5]){
+        const val = m * Math.pow(10, p); if (Math.log10(val) < ys[0] || Math.log10(val) > ys[1]) continue;
+        g += `<line x1="${PAD.l}" y1="${Y(val)}" x2="${PAD.l + iw}" y2="${Y(val)}" stroke="${m === 1 ? '#e2e2e2' : '#f1f1f1'}" stroke-width="1"/>`;
+        g += `<text x="${PAD.l - 8}" y="${Y(val) + 3.5}" text-anchor="end" font-size="10.5" fill="#666">${val}</text>`;
+      }
     g += `<line x1="${PAD.l}" y1="${PAD.t + ih}" x2="${PAD.l + iw}" y2="${PAD.t + ih}" stroke="#111" stroke-width="1"/>`;
     for (const d of [2.5, 5, 10, 20, 40, 80, 150])
-      g += `<text x="${X(d)}" y="${PAD.t + ih + 14}" text-anchor="middle" font-size="10.5" fill="#666">${d}</text>`;
-    g += `<text x="${PAD.l + iw / 2}" y="${H - 3}" text-anchor="middle" font-size="10.5" fill="#666">Δt between frames (ms, log)</text>`;
-    if (showY) g += `<text transform="translate(12,${PAD.t + ih / 2}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="#666">rollout ADE (mm, log)</text>`;
-    g += `<text x="${PAD.l}" y="13" font-size="13" font-weight="600" fill="#111">${title}</text>`;
-
-    for (const name of ORDER){
-      const r = S.results[name]; if (!r) continue;
-      const pts = Object.values(r).map(a => ({d: a.dt_ms, e: a.ade_mm, held: a.held_out}))
-        .sort((a, b) => a.d - b.d);
-      const solid = pts.filter(p => !p.held);
+      g += `<text x="${X(d)}" y="${PAD.t + ih + 15}" text-anchor="middle" font-size="10.5" fill="#666">${d}</text>`;
+    g += `<text x="${PAD.l + iw / 2}" y="${H - 4}" text-anchor="middle" font-size="10.5" fill="#666">Δt between frames (ms, log)</text>`;
+    g += `<text transform="translate(13,${PAD.t + ih / 2}) rotate(-90)" text-anchor="middle" font-size="10.5" fill="#666">rollout error, ADE (mm, log)</text>`;
+    for (const s of series){
+      const solid = s.pts.filter(p => !p.held), dash = s.split === 'eval';
       g += `<path d="${solid.map((p, i) => (i ? 'L' : 'M') + X(p.d).toFixed(1) + ' ' + Y(p.e).toFixed(1)).join('')}"
-            fill="none" stroke="${COL[name]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-      for (const p of pts)
+            fill="none" stroke="${COL[s.name]}" stroke-width="${dash ? 1.8 : 2.2}" ${dash ? 'stroke-dasharray="5 3.5"' : ''}
+            stroke-linejoin="round" stroke-linecap="round" opacity="${dash ? 0.85 : 1}"/>`;
+      for (const p of s.pts)
         g += p.held
-          ? `<circle cx="${X(p.d).toFixed(1)}" cy="${Y(p.e).toFixed(1)}" r="4" fill="#fbfaf8" stroke="${COL[name]}" stroke-width="2"/>`
-          : `<circle cx="${X(p.d).toFixed(1)}" cy="${Y(p.e).toFixed(1)}" r="4" fill="${COL[name]}" stroke="#fbfaf8" stroke-width="1.5"/>`;
-      const last = solid[solid.length - 1];
-      if (last) g += `<text x="${X(last.d) + 8}" y="${Y(last.e) + 3.5}" font-size="11.5" font-weight="600" fill="${COL[name]}">${name}</text>`;
+          ? `<circle cx="${X(p.d).toFixed(1)}" cy="${Y(p.e).toFixed(1)}" r="3.8" fill="#fbfaf8" stroke="${COL[s.name]}" stroke-width="1.8"/>`
+          : `<circle cx="${X(p.d).toFixed(1)}" cy="${Y(p.e).toFixed(1)}" r="${dash ? 3 : 4}" fill="${dash ? '#fbfaf8' : COL[s.name]}" stroke="${COL[s.name]}" stroke-width="1.5"/>`;
+      if (s.split === 'train'){
+        const last = solid[solid.length - 1];
+        if (last) g += `<text x="${X(last.d) + 9}" y="${Y(last.e) + 3.5}" font-size="11.5" font-weight="600" fill="${COL[s.name]}">${s.name}</text>`;
+      }
     }
-    return g + `</g>`;
-  }
-
-  function draw(A, B){
-    const W = 1080, H = 300, PAD = {l: 52, r: 86, t: 22, b: 34}, GAP = 26;
-    const pw = (W - GAP) / 2;
-    const all = [A, B].filter(Boolean).flatMap(S => ORDER.flatMap(n => Object.values(S.results[n] || {}).map(a => a.ade_mm)));
-    const dts = [A, B].filter(Boolean).flatMap(S => ORDER.flatMap(n => Object.values(S.results[n] || {}).map(a => a.dt_ms)));
-    const dom = {xs: [Math.log10(Math.min(...dts) * 0.85), Math.log10(Math.max(...dts) * 1.12)],
-                 ys: [Math.log10(Math.min(...all) * 0.8), Math.log10(Math.max(...all) * 1.25)]};
-    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rollout error against step size for three inference samplers, training split beside the held-out split">`;
-    svg += panel(A, 0, pw, H, PAD, dom, `training split — ${A.n_requested} episodes`, true);
-    if (B) svg += panel(B, pw + GAP, pw, H, PAD, dom, `held-out (eval) split — ${B.n_requested} episodes`, false);
-    document.getElementById('chart').innerHTML = svg + '</svg>';
-    document.getElementById('legend').innerHTML = ORDER.map(n =>
-      `<span><i style="background:${COL[n]}"></i><b>${n}</b>${n === 'one-shot' ? ' (1 denoising step)' : n === '25-step' ? ' (25, full-sequence)' : ' (25, pyramid schedule)'}</span>`
-    ).join('') + `<span><i style="background:#fff;border:2px solid #666;height:9px;width:9px;border-radius:50%"></i>hollow = Δt never trained</span>`;
+    document.getElementById('chart').innerHTML = g + '</svg>';
+    document.getElementById('legend').innerHTML =
+      ORDER.map(n => `<span><i style="border-color:${COL[n]}"></i><b>${n}</b>${n === 'one-shot' ? ' — 1 denoising step' : ' — 25 steps'}</span>`).join('')
+      + `<span><i style="border-color:#666"></i>solid = training split</span>`
+      + `<span><i style="border-color:#666;border-top-style:dashed"></i>dashed = held-out (eval)</span>`
+      + `<span><i style="border-top:0;width:9px;height:9px;border:2px solid #666;border-radius:50%;vertical-align:0"></i>hollow = Δt never trained</span>`;
   }
 
   function table(A, B){
     const rungs = [...new Set(ORDER.flatMap(n => Object.values(A.results[n] || {}).map(a => a.dt_ms)))].sort((a, b) => a - b);
     const held = new Set(A.held_ms || []);
+    const get = (S, n, d) => S && S.results[n] ? Object.values(S.results[n]).find(a => a.dt_ms === d) : null;
     let h = `<table class="s"><thead><tr><th>Δt</th>`
-      + ORDER.map(n => `<th class="num">${n}<br><span style="font-weight:400;color:var(--soft)">train</span></th>`).join('')
-      + (B ? `<th class="num">25-step<br><span style="font-weight:400;color:var(--soft)">eval</span></th>` : '')
+      + ORDER.map(n => `<th class="num" colspan="2">${n}</th>`).join('') + `</tr><tr><th></th>`
+      + ORDER.map(() => `<th class="num" style="font-weight:400;color:var(--soft)">train</th><th class="num" style="font-weight:400;color:var(--soft)">eval</th>`).join('')
       + `</tr></thead><tbody>`;
     for (const d of rungs){
-      const row = ORDER.map(n => Object.values(A.results[n] || {}).find(a => a.dt_ms === d));
-      const best = Math.min(...row.filter(Boolean).map(a => a.ade_mm));
-      const be = B ? Object.values(B.results['25-step'] || {}).find(a => a.dt_ms === d) : null;
+      const tr = ORDER.map(n => get(A, n, d));
+      const best = Math.min(...tr.filter(Boolean).map(a => a.ade_mm));
       h += `<tr class="${held.has(d) ? 'held' : ''}"><td>${d} ms${held.has(d) ? ' · not trained' : ''}</td>`
-        + row.map(a => `<td class="num ${a && a.ade_mm === best ? 'best' : ''}">${a ? fmt(a.ade_mm) : '—'}</td>`).join('')
-        + (B ? `<td class="num">${be ? fmt(be.ade_mm) : '—'}</td>` : '') + `</tr>`;
+        + ORDER.map(n => {
+            const a = get(A, n, d), b = get(B, n, d);
+            return `<td class="num ${a && a.ade_mm === best ? 'best' : ''}">${a ? fmt(a.ade_mm) : '—'}</td><td class="num">${b ? fmt(b.ade_mm) : '—'}</td>`;
+          }).join('') + `</tr>`;
     }
     document.getElementById('tablewrap').innerHTML = h + '</tbody></table>';
   }
 
+  // ---------- 3D: one canvas, three scissor viewports, shared camera and clock ----------
+  const canvas = document.getElementById('bg');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
+  camera.position.set(2.15, 1.15, 2.15);
+  let controls = null, tiles = [], T3 = 0, f3 = -1, last = 0;
+  const HOLD_MS = 420;                                   // wall-clock per frame: rollouts differ in length by 5x
+
+  function arena(H){
+    const s = new THREE.Scene();
+    const g = new THREE.GridHelper(1, 10, 0xd6d2ca, 0xe6e3dc); g.position.set(0.5, 0, 0.5); s.add(g);
+    const P = (a, b, c) => new THREE.Vector3(a, b, c);
+    s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,0,0), P(1,0,0), P(1,0,1), P(0,0,1)]), new THREE.LineBasicMaterial({color: 0x444444})));
+    const up = new THREE.LineBasicMaterial({color: 0xb0b0b0});
+    for (const [a, c] of [[0,0],[1,0],[1,1],[0,1]]) s.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([P(a,0,c), P(a,H,c)]), up));
+    s.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([P(0,H,0), P(1,H,0), P(1,H,1), P(0,H,1)]), new THREE.LineBasicMaterial({color: 0xcccccc})));
+    return s;
+  }
+  function render3(){
+    const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+    if (canvas.width !== Math.floor(w * pr) || canvas.height !== Math.floor(h * pr)) renderer.setSize(w, h, false);
+    renderer.setScissorTest(false); renderer.setClearColor(0x000000, 0); renderer.clear();
+    renderer.setScissorTest(true); renderer.setClearColor(0xfbfaf8, 1);
+    for (const t of tiles){
+      if (!t.scene) continue;
+      const r = t.el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight) continue;
+      renderer.setViewport(r.left, innerHeight - r.bottom, r.width, r.height);
+      renderer.setScissor(r.left, innerHeight - r.bottom, r.width, r.height);
+      camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+      renderer.render(t.scene, camera);
+    }
+    renderer.setScissorTest(false);
+  }
+  function setF3(f){
+    f3 = f;
+    for (const t of tiles){
+      if (!t.buf) continue;
+      const n = t.n, base = Math.min(f, t.T - 1) * n * 3, arr = t.geo.attributes.position.array;
+      for (let i = 0; i < n * 3; i++) arr[i] = t.lo + t.buf[base + i] / 65535 * t.sc;
+      t.geo.attributes.position.needsUpdate = true;
+      t.lbl.textContent = `frame ${Math.min(f, t.T - 1) + 1} / ${t.T}`;
+    }
+  }
+  function loop3(ts){
+    if (controls) controls.update();
+    if (T3 > 0 && ts - last > HOLD_MS){ last = ts; setF3((f3 + 1) % (T3 + 2)); }   // +2 = brief hold on the last frame
+    render3(); requestAnimationFrame(loop3);
+  }
+
+  async function load3(idx, dir){
+    const e = idx.episodes.find(x => x.dir === dir);
+    const meta = await (await fetch(`data/dtsampler3d/${idx.model}_${idx.split}/${dir}/meta.json` + v)).json();
+    const files = [['gt.bin', 'ground truth', GTCOL], ['pred.bin', 'one-shot', COL['one-shot']], ['step25.bin', '25-step', COL['25-step']]];
+    const bufs = await Promise.all(files.map(([f]) => fetch(`data/dtsampler3d/${idx.model}_${idx.split}/${dir}/${f}` + v).then(r => r.arrayBuffer())));
+    const grid = document.getElementById('grid3'); grid.innerHTML = '';
+    tiles = files.map(([f, label, col], i) => {
+      const sr = i === 1 ? meta.size_ratio.one_shot : i === 2 ? meta.size_ratio.step25 : null;
+      const ade = i === 1 ? meta.ade_mm : i === 2 ? meta.variants[0].ade_mm : null;
+      const fig = document.createElement('figure'); fig.className = 'tile';
+      fig.innerHTML = `<div class="view"></div><figcaption><b>${label}</b> <span class="mono lbl"></span><br>`
+        + (ade === null ? `${meta.n_particles} points · ${meta.n_frames} frames at ${meta.dt_ms} ms`
+                        : `ADE ${ade.toFixed(1)} mm · final size ${(sr * 100).toFixed(0)}% of truth`) + `</figcaption>`;
+      grid.appendChild(fig);
+      const sc = arena(1.2), n = meta.n_particles;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({size: 0.014, map: disc, color: i === 0 ? SAND : col, transparent: true, alphaTest: 0.4, depthWrite: true, sizeAttenuation: true}));
+      pts.frustumCulled = false; sc.add(pts);
+      return {el: fig.querySelector('.view'), lbl: fig.querySelector('.lbl'), scene: sc, geo, n,
+              T: meta.n_frames, buf: new Uint16Array(bufs[i]), lo: meta.q_lo, sc: meta.q_scale};
+    });
+    T3 = meta.n_frames; f3 = -1;
+    if (!controls){
+      controls = new THREE.OrbitControls(camera, document.getElementById('grid3'));
+      controls.enableDamping = true; controls.dampingFactor = 0.08;
+      controls.enableZoom = false; controls.enablePan = false;
+      controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.target.set(0.5, 0.22, 0.5);
+      requestAnimationFrame(loop3);
+    }
+    document.getElementById('note3d').innerHTML =
+      `${e.clip} · Δt ${meta.dt_ms} ms · ${meta.n_frames} frames of rollout from ${meta.context_len} ground-truth frames · `
+      + `${meta.n_particles} of the 1,024 points drawn. Stepped at a fixed rate so every Δt is watchable — this is not real time. Drag to rotate all three together.`;
+  }
+
   async function init(){
-    let A, B;
+    let A, B, I;
     try { A = await (await fetch('data/dtsampler/sand_train.json' + v)).json(); }
     catch (e){ document.getElementById('chart').innerHTML = '<p class="caption">Could not load data/dtsampler/sand_train.json</p>'; return; }
     try { B = await (await fetch('data/dtsampler/sand_eval.json' + v)).json(); } catch (e){ B = null; }
     draw(A, B); table(A, B);
     document.getElementById('axnote').textContent =
-      `Each point is a full autoregressive rollout from 2 ground-truth frames to ${A.horizon_ms} ms, re-anchored on the model's own predictions every ${A.future_len} frames, averaged over ${A.n_requested} episodes. Both axes are logarithmic.`;
+      `Each point is a full autoregressive rollout from ${A.context_len} ground-truth frames to ${A.horizon_ms} ms, re-anchored on the model's own predictions every ${A.future_len} frames, averaged over ${A.n_requested} episodes per split. Both axes logarithmic.`;
     document.getElementById('foot').innerHTML =
-      `${A.run} · checkpoint ${A.ckpt} at step ${A.step.toLocaleString()} · C=${A.context_len}, N=${A.future_len} · `
-      + `bold = best sampler at that step size · generated ${A.updated}`
-      + (B ? ` · eval column shown for the 25-step sampler as the generalisation check.` : '');
+      `${A.run} · checkpoint ${A.ckpt} at step ${A.step.toLocaleString()} · C=${A.context_len}, N=${A.future_len} · bold = better sampler on train at that step size · generated ${A.updated}`;
+
+    try { I = await (await fetch('data/dtsampler3d/sand_train/index.json' + v)).json(); }
+    catch (e){ document.getElementById('grid3').innerHTML = '<p class="caption">3D rollouts not exported yet.</p>'; return; }
+    const pick = document.getElementById('pick');
+    const clips = [...new Set(I.episodes.map(e => e.clip))], dts = [...new Set(I.episodes.map(e => e.dt_ms))].sort((a, b) => a - b);
+    pick.innerHTML = `<label>episode</label><select id="ep">${clips.map(c => `<option value="${c}">${c.replace(/_sand2048_sphere/, '')}</option>`).join('')}</select>`
+      + `<label>Δt</label><select id="dt">${dts.map(d => `<option value="${d}"${d === dts[dts.length - 1] ? ' selected' : ''}>${d} ms</option>`).join('')}</select>`;
+    const go = () => {
+      const c = document.getElementById('ep').value, d = +document.getElementById('dt').value;
+      const e = I.episodes.find(x => x.clip === c && x.dt_ms === d);
+      if (e) load3(I, e.dir);
+    };
+    pick.querySelectorAll('select').forEach(s => s.onchange = go);
+    go();
   }
   init();
 })();
