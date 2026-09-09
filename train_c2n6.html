@@ -183,7 +183,8 @@ function draw(){
   ].map(r => `<tr><td class="k">${r[0]}</td><td class="def">${r[1]}</td></tr>`).join('');
 
   document.getElementById('note').textContent =
-    'Updated ' + new Date(M.updated * 1000).toLocaleString() + '. This page refreshes itself every 2 minutes.';
+    'Data updated ' + new Date(M.updated * 1000).toLocaleString()
+    + ' — refreshed from the cluster every ~15 minutes; this page re-reads it every 2 minutes.';
 }
 
 function load(){
