@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
-<title>Samplers on the training set</title>
+<title>Cube: samplers on the training set</title>
 <link rel="stylesheet" href="site.css?v=20260902">
 <style>
   #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
@@ -33,9 +33,10 @@
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
-  <h1>How well does it reproduce what it was trained on?</h1>
-  <p class="sub">Autoregressive rollouts of <b>training</b> episodes the model has already seen, at every step size it
-  was trained on, next to the held-out split. Two inference schemes: a single denoising step, and the full 25.</p>
+  <h1>The cube on its own training data</h1>
+  <p class="sub">The elastic-cube model on <b>training</b> episodes it has already seen, at every step size it was
+  trained on, beside the held-out split. Two inference schemes: a single denoising step, and the full 25. If the model
+  had memorised its training data the solid lines would sit below the dashed ones — they sit above.</p>
 
   <div class="chart" id="chart"></div>
   <div class="lg" id="legend"></div>
@@ -46,10 +47,10 @@
   <p class="note" id="foot"></p>
 
   <h2>The same rollouts in 3D</h2>
-  <p>Truth beside both predictions, from training episodes. A single denoising step returns the conditional mean, so
-  the thing to check is whether it quietly <em>shrinks</em> the object — on the cube model it collapses to 0.45× true
-  size at 150 ms. Measured here, it does not: the sand predictions stay within 2 % of the truth's size at every step
-  size, for both samplers. On this model the two really are interchangeable, in shape as well as in error.</p>
+  <p>Truth beside both predictions, from training episodes. This is where the error table misleads: a single
+  denoising step returns the conditional mean, and at coarse Δt that mean is a <b>shrunken cube</b> — 54 % of true size
+  at 60 ms and 38 % at 150 ms, averaged over these clips. Twenty-five steps holds 99 % and 88 %. One-shot can win on
+  average distance while producing an object of visibly the wrong size, so judge these two on shape, not millimetres.</p>
   <div class="pick" id="pick"></div>
   <div class="grid3" id="grid3"></div>
   <p class="note" id="note3d"></p>
@@ -63,7 +64,7 @@
   // two series only; CVD-checked pair (protan/deutan ΔE 20+, contrast 5.0 / 4.1 : 1)
   const COL = {'one-shot': '#0072B2', '25-step': '#a86f00'};
   const ORDER = ['one-shot', '25-step'];
-  const SAND = '#d3a15a', GTCOL = '#7a7770';
+  const OBJ = '#3f9a94', GTCOL = '#7a7770';   // cube teal, matching the other cube pages
   const v = '?t=' + Date.now();
   const fmt = x => x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
   const disc = vizDisc();
@@ -206,7 +207,7 @@
       const sc = arena(1.2), n = meta.n_particles;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-      const pts = new THREE.Points(geo, new THREE.PointsMaterial({size: 0.014, map: disc, color: i === 0 ? SAND : col, transparent: true, alphaTest: 0.4, depthWrite: true, sizeAttenuation: true}));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({size: 0.014, map: disc, color: i === 0 ? OBJ : col, transparent: true, alphaTest: 0.4, depthWrite: true, sizeAttenuation: true}));
       pts.frustumCulled = false; sc.add(pts);
       return {el: fig.querySelector('.view'), lbl: fig.querySelector('.lbl'), scene: sc, geo, n,
               T: meta.n_frames, buf: new Uint16Array(bufs[i]), lo: meta.q_lo, sc: meta.q_scale};
@@ -221,25 +222,25 @@
     }
     document.getElementById('note3d').innerHTML =
       `${e.clip} · Δt ${meta.dt_ms} ms · ${meta.n_frames} frames of rollout from ${meta.context_len} ground-truth frames · `
-      + `${meta.n_particles} of the 1,024 points drawn. Stepped at a fixed rate so every Δt is watchable — this is not real time. Drag to rotate all three together.`;
+      + `all ${meta.n_particles} tracked points drawn. Stepped at a fixed rate so every Δt is watchable — this is not real time. Drag to rotate all three together.`;
   }
 
   async function init(){
     let A, B, I;
-    try { A = await (await fetch('data/dtsampler/sand_train.json' + v)).json(); }
-    catch (e){ document.getElementById('chart').innerHTML = '<p class="caption">Could not load data/dtsampler/sand_train.json</p>'; return; }
-    try { B = await (await fetch('data/dtsampler/sand_eval.json' + v)).json(); } catch (e){ B = null; }
+    try { A = await (await fetch('data/dtsampler/cube_train.json' + v)).json(); }
+    catch (e){ document.getElementById('chart').innerHTML = '<p class="caption">Could not load data/dtsampler/cube_train.json</p>'; return; }
+    try { B = await (await fetch('data/dtsampler/cube_eval.json' + v)).json(); } catch (e){ B = null; }
     draw(A, B); table(A, B);
     document.getElementById('axnote').textContent =
       `Each point is a full autoregressive rollout from ${A.context_len} ground-truth frames to ${A.horizon_ms} ms, re-anchored on the model's own predictions every ${A.future_len} frames, averaged over ${A.n_requested} episodes per split. Both axes logarithmic.`;
     document.getElementById('foot').innerHTML =
       `${A.run} · checkpoint ${A.ckpt} at step ${A.step.toLocaleString()} · C=${A.context_len}, N=${A.future_len} · bold = better sampler on train at that step size · generated ${A.updated}`;
 
-    try { I = await (await fetch('data/dtsampler3d/sand_train/index.json' + v)).json(); }
+    try { I = await (await fetch('data/dtsampler3d/cube_train/index.json' + v)).json(); }
     catch (e){ document.getElementById('grid3').innerHTML = '<p class="caption">3D rollouts not exported yet.</p>'; return; }
     const pick = document.getElementById('pick');
     const clips = [...new Set(I.episodes.map(e => e.clip))], dts = [...new Set(I.episodes.map(e => e.dt_ms))].sort((a, b) => a - b);
-    pick.innerHTML = `<label>episode</label><select id="ep">${clips.map(c => `<option value="${c}">${c.replace(/_sand2048_sphere/, '')}</option>`).join('')}</select>`
+    pick.innerHTML = `<label>episode</label><select id="ep">${clips.map(c => `<option value="${c}">${c.replace(/_shell2048_cube/, '')}</option>`).join('')}</select>`
       + `<label>Δt</label><select id="dt">${dts.map(d => `<option value="${d}"${d === dts[dts.length - 1] ? ' selected' : ''}>${d} ms</option>`).join('')}</select>`;
     const go = () => {
       const c = document.getElementById('ep').value, d = +document.getElementById('dt').value;
