@@ -134,7 +134,7 @@ function draw(){
     ['status', `<span class="dot ${cls}"></span>${live || '—'}`],
     ['step', `${fmt(M.step,0)}<small> / ${fmt(xmax/1000,0)}k</small>`],
     ['done', `${(100*done).toFixed(1)}<small>%</small>`],
-    ['rate', `${fmt(M.it_s,2)}<small> it/s</small>`],
+    ['rate', `${fmt(M.it_s,2)}<small> it/s wall</small>`],
     ['eta', HMS(M.eta_hours)],
     ['elapsed', M.elapsed || '—'],
     ['peak mem', `${fmt(M.peak_gib,1)}<small> GiB</small>`],
@@ -175,6 +175,8 @@ function draw(){
     ['run', M.run],
     ['hardware', M.gpu || '—'],
     ['torch.compile', M.compile || '—'],
+    ['rate', `${fmt(M.it_s,2)} it/s wall-clock · ${fmt(M.it_s_loop,2)} it/s in the training loop — `
+      + `the gap is validation every 500 steps (which runs eager by design) and a generated rollout every 2500`],
     ['train loss', last('train_loss') != null ? last('train_loss').toExponential(2) : '—'],
     ['val loss, EMA weights', last('val_loss_ema') != null ? last('val_loss_ema').toExponential(2) : '—'],
     ['best val loss, EMA weights', bv ? `${bv[1].toExponential(2)} @ step ${fmt(bv[0],0)}` : '—'],
