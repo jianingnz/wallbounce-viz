@@ -57,6 +57,10 @@
      "src": "../dtsampler.html"
     },
     {
+     "label": "Cube: training extended (live)",
+     "src": "../cubelive_x2.html"
+    },
+    {
      "label": "\u0394t model (live training)",
      "src": "../frslive.html"
     },
