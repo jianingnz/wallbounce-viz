@@ -256,10 +256,13 @@ async function fitGallery(){
 
 // ---- error at fixed times, both splits
 function rollTable(){
-  const at = (r,ms) => { const j = Math.round(ms/r.dt_ms)-1;
-    return (j>=0 && j<r.per_frame_mm.length) ? r.per_frame_mm[j].toFixed(1) : '–'; };
+  // the scored rollout ends at the clip's last frame (1190 ms for 5 ms steps), so
+  // the final column clamps to the last frame instead of indexing past the end
+  const at = (r,ms) => { const j = Math.min(Math.round(ms/r.dt_ms)-1, r.per_frame_mm.length-1);
+    return j>=0 ? r.per_frame_mm[j].toFixed(1) : '–'; };
+  const endMs = Math.round(TR.rollouts[K].per_frame_mm.length * TR.rollouts[K].dt_ms);
   let h = '<tr><th>split</th><th>AR chunks</th><th>300 ms</th><th>600 ms</th><th>900 ms</th>'
-        + '<th>1200 ms</th><th>mean (ADE)</th></tr>';
+        + `<th>${endMs} ms (end)</th><th>mean (ADE)</th></tr>`;
   for (const [lab, D] of [['training episodes', TR], ['eval episodes', EV]]){
     const r = D.rollouts[K];
     h += `<tr><td class="k">${lab}</td><td>${r.chunks}</td>`
