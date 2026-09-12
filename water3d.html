@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Liquid: Water-3D on the particle world model</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  .chart svg{display:block; width:100%; height:auto; overflow:visible}
+  .lg{display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:12.5px; color:var(--soft); margin:6px 0 14px}
+  .lg i{display:inline-block; width:18px; height:0; border-top:3px solid; margin-right:6px; vertical-align:4px}
+  .lg b{color:var(--ink); font-weight:600}
+  table.s td.num, table.s th.num{text-align:right; font-variant-numeric:tabular-nums}
+  table.s td:first-child, table.s th:first-child{text-align:left}
+  table.s td.best{font-weight:700}
+  table.s tr.ref td{color:var(--soft)}
+  .note{font-size:12.5px; color:var(--soft); margin:8px 0 0; line-height:1.55}
+  .flag{border-left:3px solid #D55E00; padding:2px 0 2px 12px; margin:14px 0; font-size:13.5px; line-height:1.6}
+  .src{font-size:12.5px; color:var(--soft); line-height:1.7; margin-top:6px}
+  .src code{font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Liquid, first contact</h1>
+  <p class="sub">DeepMind's <b>Water-3D</b> — SPH water sloshing in a closed box — read into the particle world model
+  by <b>Robert Ren</b>. Two questions so far: what does a checkpoint trained on solids do with liquid (nothing good),
+  and can the architecture represent water at all when asked to memorise a single batch (yes, once you stop clipping
+  the targets). Everything below is a <b>fixed-batch overfit or a zero-shot receipt</b>. No model has been trained on
+  the water corpus yet.</p>
+
+  <h2>A solids checkpoint meets water</h2>
+  <p>The UNet 40K checkpoint, never trained on liquid, run through the production evaluator. The MPM row is the same
+  command on the data it was trained for, as a control.</p>
+  <table class="s">
+    <tr><th>set</th><th class="num">windows</th><th class="num">window mean</th><th class="num">window final</th>
+        <th class="num">rollout&nbsp;48 mean</th><th class="num">rollout final</th></tr>
+    <tr><td>MPM val, 3 batches <span style="color:var(--soft)">(control)</span></td><td class="num">12</td>
+        <td class="num">9.60</td><td class="num">12.23</td><td class="num">85.73</td><td class="num">103.80</td></tr>
+    <tr><td>Water-3D valid, 6 trajectories</td><td class="num">18</td>
+        <td class="num">161.37</td><td class="num">274.72</td><td class="num">206.75</td><td class="num">247.88</td></tr>
+  </table>
+  <p class="note">Millimetres. Window error is one 16-frame prediction from 4 given frames; rollout error is 48 frames
+  of the model feeding on itself. Water is <b>17&times; worse per window</b> than the control.</p>
+  <div class="flag"><b>It pours through the walls.</b> At frame 48, 98% of the true particles are still inside the
+  box and only <b>32%</b> of the model's are. Water-3D ships no boundary particles and the domain adds no
+  distance-to-wall feature, so a model that never saw liquid has no idea the container exists.</div>
+
+  <h2>Can it memorise one batch?</h2>
+  <p>Four 20-frame windows from one validation trajectory, 4,096 particles, 10,000 updates, the August MPM-specialist
+  protocol verbatim. This is a capacity check, not a benchmark.</p>
+  <div class="chart" id="c_fit"></div>
+  <div class="lg" id="l_fit"></div>
+  <table class="s">
+    <tr><th>arm</th><th class="num">500</th><th class="num">2,000</th><th class="num">5,000</th><th class="num">10,000</th><th class="num">8-seed final</th></tr>
+    <tr><td>A · UNet from scratch</td><td class="num">115.22</td><td class="num">50.81</td><td class="num">51.09</td><td class="num">38.57</td><td class="num best">39.00 ± 0.17</td></tr>
+    <tr><td>B · transformer from scratch</td><td class="num">126.46</td><td class="num">61.87</td><td class="num">42.42</td><td class="num">40.48</td><td class="num">40.52 ± 0.20</td></tr>
+    <tr><td>C · UNet from the 40K checkpoint</td><td class="num">97.26</td><td class="num">72.79</td><td class="num">—</td><td class="num">—</td><td class="num">72.78 ± 0.44</td></tr>
+    <tr class="ref"><td>MPM specialist, UNet <span style="font-style:italic">(MPM batch, same protocol)</span></td><td class="num">40.62</td><td class="num">23.01</td><td class="num">16.95</td><td class="num">13.03</td><td class="num">13.43 ± 0.35</td></tr>
+    <tr class="ref"><td>MPM specialist, transformer <span style="font-style:italic">(MPM batch)</span></td><td class="num">56.40</td><td class="num">35.81</td><td class="num">21.12</td><td class="num">23.90</td><td class="num">23.52 ± 0.34</td></tr>
+  </table>
+  <p class="note">Per-particle L2 on the trained batch, millimetres. The two MPM rows move at almost identical speed
+  (27.29 against 27.22 mm per frame), so they are a fair yardstick. <b>Starting from the solids checkpoint made it
+  worse</b>, not better: arm C sits at 72.8 mm where scratch was already at 50.8.</p>
+
+  <h2>The clipping floor was doing the damage</h2>
+  <p>Training clips each target to a frozen per-axis motion limit. Water's initial collapse moves far faster than
+  those limits allow, so the target itself is truncated — and simply integrating the <i>clipped ground truth</i>
+  already scores 26.1 mm. No model trained this way can score below that.</p>
+  <div class="chart" id="c_floor"></div>
+  <p class="note">Window 0 is the initial release, and 19.7% of its targets are clipped. It alone carries the batch:
+  arm A scores 88 mm on this window against a batch mean of 38.6.</p>
+  <table class="s">
+    <tr><th>backbone</th><th>delta scale</th><th>targets</th><th class="num">error, 8 seeds</th></tr>
+    <tr><td>UNet</td><td>MPM reference (±26.8 / ±96.8 mm)</td><td>clipped</td><td class="num">39.0</td></tr>
+    <tr><td>transformer</td><td>MPM reference</td><td>clipped</td><td class="num">40.5</td></tr>
+    <tr><td>UNet</td><td>water, first-window fit (116 / 121 mm)</td><td>unclipped</td><td class="num">33.6</td></tr>
+    <tr><td>transformer</td><td>water, first-window fit</td><td>unclipped</td><td class="num">62.4</td></tr>
+    <tr><td>UNet</td><td>MPM reference</td><td>unclipped</td><td class="num">23.6</td></tr>
+    <tr><td>UNet</td><td>water, every-window fit (69.8 / 86.3 mm) — shipped</td><td>unclipped</td><td class="num best">22.8</td></tr>
+  </table>
+  <p class="note">Removing the clipping at a fixed scale took the batch from <b>39.0 to 23.6 mm</b>. Fitting the scale
+  on the violent first window instead of all of them cost more than it saved (33.6 mm): the calmest window went from
+  9 to 21 mm under it. Water's own every-window scale and MPM's reference land within a millimetre of each other
+  (22.8 ± 0.21 against 23.6 ± 0.29), so that choice is not settled by these numbers.</p>
+  <table class="s">
+    <tr><th>window</th><th class="num">water moves</th><th class="num">water fit (shipped)</th><th class="num">MPM reference scale</th></tr>
+    <tr><td>collapse</td><td class="num">62</td><td class="num">34.7</td><td class="num best">35.0</td></tr>
+    <tr><td>second</td><td class="num">27</td><td class="num">29.7</td><td class="num best">28.7</td></tr>
+    <tr><td>third</td><td class="num">13</td><td class="num best">13.6</td><td class="num">19.6</td></tr>
+    <tr><td>calmest</td><td class="num">8</td><td class="num">13.1</td><td class="num best">10.8</td></tr>
+  </table>
+  <p class="note">mm per frame, and mm of error. The two scales differ only away from the collapse.</p>
+
+  <h2>What this does not answer</h2>
+  <ul>
+    <li><b>No corpus training.</b> The 1,000-trajectory training split has never been trained on; every number here is
+      one batch or one zero-shot pass.</li>
+    <li><b>No held-out generalisation.</b> An overfit fit says the architecture can represent liquid, nothing more.</li>
+    <li><b>Walls are still implicit.</b> A model can learn this one box because every trajectory uses it, but nothing
+      transfers to another container.</li>
+    <li><b>Each window sees 4,096 of up to 13,248 particles</b>, so the model never sees the whole fluid; the rest act
+      only through the sampled neighbours.</li>
+    <li><b>The UNet's coarse-point budget for water is unvalidated</b> — every arm above ran at 256, inherited from
+      sand, where the domain now suggests 1,024.</li>
+  </ul>
+
+  <p class="src">Measured by <b>Robert Ren</b>, 2026-09-11. Reproduced here from his <code>docs/WATER3D.md</code> and
+  results page; nothing on this page was re-run by me.<br>
+  Branch <code>robert/water3d</code> (off <code>robert/clean</code>) ·
+  data <code>/data/group_data/katefgroup/datasets/deepmind_lts/Water-3D/materialized_v1</code>, 1,000 / 100 / 100
+  trajectories, 84 GB · fixture <code>water3d_valid0_c4f16b4</code> · protocol C4/F16, B4, seed 42, bf16,
+  8 final seeds 10000–10007.</p>
+</div>
+
+<script>
+const FIT = {
+  x: [500, 2000, 5000, 10000],
+  series: [
+    {name:'A · UNet, scratch',      color:'#0072B2', y:[115.22, 50.81, 51.09, 38.57]},
+    {name:'B · transformer, scratch',color:'#D55E00', y:[126.46, 61.87, 42.42, 40.48]},
+    {name:'C · UNet, from 40K',     color:'#009E73', y:[97.26, 72.79, null, null]}
+  ],
+  rules: [
+    {name:'clipping floor 26.1', y:26.1, dash:'5 4'},
+    {name:'MPM specialist 13.0', y:13.03, dash:'2 3'}
+  ]
+};
+const FLOOR = {
+  labels: ['window 0\n(collapse)', 'window 1', 'window 2', 'window 3\n(calmest)'],
+  floor:  [74.3, 28.4, 1.6, 0.0],
+  share:  [19.7, 8.1, 1.0, 0.0]
+};
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || '#666';
+
+function fitChart(){
+  const box = document.getElementById('c_fit');
+  const W = Math.max(box.clientWidth, 340), H = 320, L = 52, R = 118, T = 14, B = 44;
+  const xs = FIT.x, lx = v => Math.log10(v);
+  const x0 = lx(xs[0]) - 0.06, x1 = lx(xs[xs.length-1]) + 0.06;
+  const ymax = 135;
+  const X = v => L + (W-L-R) * (lx(v)-x0)/(x1-x0);
+  const Y = v => T + (H-T-B) * (1 - v/ymax);
+  let g = '';
+  for (const t of [0, 25, 50, 75, 100, 125]){
+    g += `<line x1="${L}" y1="${Y(t)}" x2="${W-R}" y2="${Y(t)}" stroke="${css('--line')}" stroke-width="1"/>`;
+    g += `<text x="${L-8}" y="${Y(t)+4}" text-anchor="end" font-size="11" fill="#666">${t}</text>`;
+  }
+  for (const v of xs)
+    g += `<text x="${X(v)}" y="${H-22}" text-anchor="middle" font-size="11" fill="#666">${v.toLocaleString()}</text>`;
+  g += `<text x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle" font-size="11.5" fill="#666">updates on the one batch</text>`;
+  g += `<text x="14" y="${T+(H-T-B)/2}" transform="rotate(-90 14 ${T+(H-T-B)/2})" text-anchor="middle" font-size="11.5" fill="#666">error on that batch (mm)</text>`;
+  for (const r of FIT.rules){
+    g += `<line x1="${L}" y1="${Y(r.y)}" x2="${W-R}" y2="${Y(r.y)}" stroke="#999" stroke-width="1.5" stroke-dasharray="${r.dash}"/>`;
+    g += `<text x="${W-R+6}" y="${Y(r.y)+4}" font-size="11" fill="#666">${r.name}</text>`;
+  }
+  for (const s of FIT.series){
+    const pts = s.y.map((v,i)=> v==null ? null : [X(xs[i]), Y(v)]).filter(Boolean);
+    g += `<path d="${pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+    s.y.forEach((v,i)=>{ if(v==null) return;
+      g += `<circle cx="${X(xs[i])}" cy="${Y(v)}" r="4.5" fill="${s.color}" stroke="#fff" stroke-width="2"><title>${s.name} · ${xs[i].toLocaleString()} updates · ${v.toFixed(2)} mm</title></circle>`;});
+    const last = s.y.map((v,i)=>[v,i]).filter(d=>d[0]!=null).pop();
+    g += `<text x="${X(xs[last[1]])+9}" y="${Y(last[0])+4}" font-size="11.5" fill="${s.color}" font-weight="600">${last[0].toFixed(1)}</text>`;
+  }
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Batch error against training updates for three overfit arms"> ${g}</svg>`;
+  document.getElementById('l_fit').innerHTML =
+    FIT.series.map(s=>`<span><i style="border-color:${s.color}"></i><b>${s.name}</b></span>`).join('') +
+    `<span style="color:#666"><i style="border-color:#999; border-top-style:dashed"></i>reference levels</span>`;
+}
+
+function floorChart(){
+  const box = document.getElementById('c_floor');
+  const W = Math.max(box.clientWidth, 340), H = 210, L = 52, R = 16, T = 12, B = 52;
+  const n = FLOOR.floor.length, ymax = 80;
+  const bw = (W-L-R)/n, pad = 14;
+  const Y = v => T + (H-T-B) * (1 - v/ymax);
+  let g = '';
+  for (const t of [0, 20, 40, 60, 80]){
+    g += `<line x1="${L}" y1="${Y(t)}" x2="${W-R}" y2="${Y(t)}" stroke="${css('--line')}" stroke-width="1"/>`;
+    g += `<text x="${L-8}" y="${Y(t)+4}" text-anchor="end" font-size="11" fill="#666">${t}</text>`;
+  }
+  FLOOR.floor.forEach((v,i)=>{
+    const x = L + i*bw + pad/2, w = bw - pad, y = Y(v), h = Y(0)-Y(v);
+    if (h > 0) g += `<path d="M${x} ${Y(0)} L${x} ${y+4} Q${x} ${y} ${x+4} ${y} L${x+w-4} ${y} Q${x+w} ${y} ${x+w} ${y+4} L${x+w} ${Y(0)} Z" fill="#0072B2"><title>window ${i}: floor ${v.toFixed(1)} mm, ${FLOOR.share[i]}% of targets clipped</title></path>`;
+    g += `<text x="${x+w/2}" y="${(h>16?y+14:y-6)}" text-anchor="middle" font-size="11.5" font-weight="600" fill="${h>16?'#fff':'#666'}">${v.toFixed(1)}</text>`;
+    FLOOR.labels[i].split('\n').forEach((t,k)=>{
+      g += `<text x="${x+w/2}" y="${Y(0)+16+k*13}" text-anchor="middle" font-size="11" fill="#666">${t}</text>`;});
+    g += `<text x="${x+w/2}" y="${Y(0)+42}" text-anchor="middle" font-size="11" fill="#999">${FLOOR.share[i]}% clipped</text>`;
+  });
+  g += `<line x1="${L}" y1="${Y(0)}" x2="${W-R}" y2="${Y(0)}" stroke="#999" stroke-width="1"/>`;
+  g += `<text x="14" y="${T+(H-T-B)/2}" transform="rotate(-90 14 ${T+(H-T-B)/2})" text-anchor="middle" font-size="11.5" fill="#666">clipping floor (mm)</text>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Clipping floor per window">${g}</svg>`;
+}
+
+function draw(){ fitChart(); floorChart(); }
+draw(); addEventListener('resize', draw);
+</script>
+</body>
+</html>
