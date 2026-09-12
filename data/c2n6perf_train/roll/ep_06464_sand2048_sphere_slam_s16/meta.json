@@ -1,0 +1,1 @@
+{"clip": "ep_06464_sand2048_sphere_slam", "dt_ms": 40.0, "held_out": false, "n_frames": 12, "n_gt_frames": 12, "n_particles": 512, "context_len": 2, "q_lo": -0.025310561060905457, "q_scale": 0.9286722987890244, "ade_mm": 9.24, "fde_mm": 14.01, "scored_ms": 400.0, "per_frame_mm": [0.73, 4.36, 4.41, 7.23, 9.89, 11.68, 12.71, 13.52, 13.84, 14.01], "variants": []}
