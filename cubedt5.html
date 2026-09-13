@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Cube 331M — live</title>
+<link rel="stylesheet" href="site.css?v=20260903">
+<style>
+  .wrap{max-width:1320px; position:relative; z-index:1}
+  #bg{position:fixed; left:0; top:0; width:100%; height:100%; z-index:0; display:block; pointer-events:none}
+  .ttl{font-family:var(--serif); font-size:20px; font-weight:600; margin:34px 0 2px}
+  .ttl span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft); letter-spacing:.02em}
+  .cap{font-family:var(--serif); font-size:16px; font-weight:600; margin:0 0 2px}
+  .cap span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft)}
+  .charts > div{margin:0 0 22px}
+  .ctl{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0 4px; font-size:12.5px; color:var(--soft)}
+  svg{width:100%; display:block; overflow:visible}
+  table{margin-top:12px}
+  td.k,th:first-child{text-align:left}
+  td.tr{color:#0072B2; font-weight:600} td.ev{color:#D55E00; font-weight:600}
+  .note{font-size:14px; color:#333; margin:14px 0 0; line-height:1.55; max-width:84ch}
+  .small{font-size:12.5px; color:var(--soft); margin:8px 0 0; max-width:84ch}
+  #stage{height:430px; position:relative; border:1px solid var(--line); margin-top:10px}
+  #stage canvas{width:100%; height:100%; display:block}
+  .lbl{position:absolute; top:8px; font-size:12.5px; color:var(--soft)} .lbl.l{left:10px} .lbl.r{left:calc(50% + 10px)}
+  .leg i{display:inline-block; width:14px; height:0; border-top:3px solid; margin:0 5px 0 12px; vertical-align:4px}
+  @media(max-width:900px){.charts{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="wrap">
+
+  <h1>Cube, 331 M</h1>
+  <p class="sub" id="status">loading…</p>
+  <p class="small">Robert's unified UNet on our Genesis elastic-cube corpus, one 5&nbsp;ms step, 2 ground-truth
+    frames &rarr; 16 predicted, with our two conditioning choices ported in &mdash; &Delta;t through the
+    adaptive layer norm and bidirectional temporal attention &mdash; plus the wall vector his stack lacked.
+    Built as a controlled twin of <span class="mono">c2f6_cube_dt5_adaln_bi</span> (39&nbsp;M): same data,
+    window, step size, effective batch and step budget, so what differs is architecture and capacity.</p>
+
+  <p class="ttl">Training <span>live from the run</span></p>
+  <div class="charts">
+    <div><p class="cap">Training objective <span>MSE on the predicted velocity, normalizer units</span></p>
+      <svg id="c_tr" style="height:230px"></svg><div class="leg" id="l_tr"></div></div>
+    <div><p class="cap">Validation <span>live weights, and the EMA the best checkpoint is gated on</span></p>
+      <svg id="c_val" style="height:230px"></svg><div class="leg" id="l_val"></div></div>
+  </div>
+
+  <p class="ttl">Training episodes vs eval episodes
+    <span>same checkpoint, same protocol, <b id="n_ep">–</b> episodes per split, 25 denoising steps</span></p>
+  <table id="t_fit"></table>
+  <p class="note" id="verdict"></p>
+
+  <p class="ttl">Error along the rollout <span>mean over the episodes of each split, the whole clip</span></p>
+  <svg id="c_pf" style="height:280px"></svg><div class="leg" id="l_pf"></div>
+  <p class="small">Two ground-truth frames in, then the model is re-anchored on its own predictions to the end
+    of the clip &mdash; never re-grounded on truth.</p>
+
+  <p class="ttl">Error as training proceeds <span>every refresh, both splits</span></p>
+  <svg id="c_hist" style="height:250px"></svg><div class="leg" id="l_hist"></div>
+
+  <p class="ttl">One rollout, watched <span>ground truth left, prediction right &mdash; drag to rotate</span></p>
+  <div class="ctl" id="ex_pick"></div>
+  <div id="stage"><canvas id="c"></canvas>
+    <div class="lbl l">ground truth</div><div class="lbl r">prediction</div></div>
+  <p class="small" id="excap"></p>
+
+  <p class="small">Each number is a mean over the episodes of one split, so a single refresh moves by tens of
+    millimetres on these chaotic clips; read the trend across refreshes, not one point. Both splits use the
+    same clips at every step, so the comparison between them is tighter than either absolute value.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="overlay.js?v=2"></script>
+<script>
+const COL={train:'#0072B2',eval:'#D55E00'};   // validated: protan dE 21.9, deutan 28.2
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#666';
+let S=null,H=[],curves=null;
+
+function axes(svg,W,H2,L,R,T,B,ylab){let g='';
+ g+=`<text x="13" y="${T+(H2-T-B)/2}" transform="rotate(-90 13 ${T+(H2-T-B)/2})" text-anchor="middle" font-size="11" fill="#666">${ylab}</text>`;
+ return g;}
+
+function logChart(id,legId,series,xmax,ylab,xlab){const svg=document.getElementById(id);
+ const W=Math.max(svg.clientWidth,340),H2=210,L=54,R=14,T=10,B=30;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H2}`);
+ const vals=series.flatMap(s=>s.pts.map(p=>p[1])).filter(v=>v>0);if(!vals.length){svg.innerHTML='';return;}
+ const lo=Math.pow(10,Math.floor(Math.log10(Math.min(...vals)))),hi=Math.pow(10,Math.ceil(Math.log10(Math.max(...vals))));
+ const X=s=>L+(W-L-R)*s/xmax,Y=v=>T+(H2-T-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+ let g='';
+ for(let d=lo;d<=hi;d*=10)g+=`<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/><text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d.toExponential(0)}</text>`;
+ for(const f of [0,.25,.5,.75,1])g+=`<text x="${X(f*xmax)}" y="${H2-8}" text-anchor="middle" font-size="11" fill="#666">${Math.round(f*xmax/1000)}k</text>`;
+ g+=axes(svg,W,H2,L,R,T,B,ylab);
+ for(const s of series)g+=`<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="1.8"/>`;
+ svg.innerHTML=g;
+ document.getElementById(legId).innerHTML=series.map(s=>`<span><i style="border-color:${s.color}"></i><b>${s.name}</b></span>`).join('')+
+   `<span>${xlab}</span>`;}
+
+function lineChart(id,legId,series,xs,ylab,xlab,xfmt){const svg=document.getElementById(id);
+ const W=Math.max(svg.clientWidth,340),H2=230,L=58,R=14,T=10,B=34;
+ svg.setAttribute('viewBox',`0 0 ${W} ${H2}`);
+ const all=series.flatMap(s=>s.pts.map(p=>p[1])).filter(v=>isFinite(v));if(!all.length){svg.innerHTML='';return;}
+ const x0=Math.min(...series.flatMap(s=>s.pts.map(p=>p[0]))),x1=Math.max(...series.flatMap(s=>s.pts.map(p=>p[0])));
+ const ymax=Math.max(...all)*1.08,X=v=>L+(W-L-R)*((v-x0)/Math.max(x1-x0,1e-9)),Y=v=>T+(H2-T-B)*(1-v/ymax);
+ let g='';const ticks=4;
+ for(let i=0;i<=ticks;i++){const v=ymax*i/ticks;
+  g+=`<line x1="${L}" y1="${Y(v)}" x2="${W-R}" y2="${Y(v)}" stroke="${css('--line')}"/><text x="${L-7}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="#666">${v>=100?v.toFixed(0):v.toFixed(1)}</text>`;}
+ for(let i=0;i<=4;i++){const v=x0+(x1-x0)*i/4;g+=`<text x="${X(v)}" y="${H2-10}" text-anchor="middle" font-size="11" fill="#666">${xfmt(v)}</text>`;}
+ g+=axes(svg,W,H2,L,R,T,B,ylab);
+ for(const s of series){g+=`<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="2"/>`;
+  if(s.pts.length<40)s.pts.forEach(p=>{g+=`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="${s.color}" stroke="#fff" stroke-width="1.5"><title>${xfmt(p[0])}: ${p[1].toFixed(1)} mm</title></circle>`;});}
+ svg.innerHTML=g;
+ document.getElementById(legId).innerHTML=series.map(s=>`<span><i style="border-color:${s.color}"></i><b>${s.name}</b></span>`).join('')+`<span>${xlab}</span>`;}
+
+// ---- 3D viewer (same construction as the other live pages)
+const canvas=document.getElementById('c'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setScissorTest(true);const sprite=vizDisc();
+function mk(col){const sc=new THREE.Scene();sc.background=new THREE.Color('#fbfaf8');const geo=new THREE.BufferGeometry();
+ const p=new THREE.Points(geo,new THREE.PointsMaterial({size:0.015,map:sprite,color:col,transparent:true,alphaTest:0.35,sizeAttenuation:true}));
+ p.frustumCulled=false;sc.add(p);
+ const eg=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1.2,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));
+ eg.position.set(0,0.6,0);sc.add(eg);
+ const gr=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);gr.position.set(0,0,0);sc.add(gr);return{scene:sc,geo};}
+const V_gt=mk(0x0072B2),V_pr=mk(0xD55E00),ov=makeOverlay(V_pr.scene,sprite,0.01);
+const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.5,1.1,1.7);
+const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0,0.35,0);controls.enableDamping=true;
+const clock=makeClock(()=>1);
+let gt=null,pr=null,N=0,T=0,dtms=5,frame=-1,meta=null;
+function setFrame(f){if(!gt)return;frame=f;
+ V_gt.geo.attributes.position.array.set(gt.subarray(f*N*3,(f+1)*N*3));V_gt.geo.attributes.position.needsUpdate=true;
+ V_pr.geo.attributes.position.array.set(pr.subarray(f*N*3,(f+1)*N*3));V_pr.geo.attributes.position.needsUpdate=true;
+ ov.update(gt,pr,f,f,N);}
+function render(){const w=canvas.clientWidth,h=canvas.clientHeight,half=Math.floor(w/2);if(!w||!h)return;
+ const p=renderer.getPixelRatio();if(canvas.width!==Math.floor(w*p)||canvas.height!==Math.floor(h*p))renderer.setSize(w,h,false);
+ camera.aspect=half/h;camera.updateProjectionMatrix();
+ renderer.setViewport(0,0,half,h);renderer.setScissor(0,0,half,h);renderer.render(V_gt.scene,camera);
+ renderer.setViewport(half,0,w-half,h);renderer.setScissor(half,0,w-half,h);renderer.render(V_pr.scene,camera);}
+function loop(ts){controls.update();if(gt){const f=Math.min(T-1,Math.round(clock.tick(ts,true,(T-1)*dtms)/dtms));if(f!==frame)setFrame(f);}render();requestAnimationFrame(loop);}
+async function loadEx(dir){const v='?t='+Date.now();
+ meta=await (await fetch(`data/cubedt5/roll/${dir}/meta.json${v}`)).json();
+ const dq=b=>{const u=new Uint16Array(b),f=new Float32Array(u.length);for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;};
+ const [g,p]=await Promise.all([fetch(`data/cubedt5/roll/${dir}/gt.bin${v}`).then(r=>r.arrayBuffer()),
+                                fetch(`data/cubedt5/roll/${dir}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
+ gt=dq(g);pr=dq(p);N=meta.n_particles;T=meta.n_frames;dtms=meta.dt_ms;
+ for(const V of [V_gt,V_pr])V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));
+ ov.alloc(N);frame=-1;clock.set(0);setFrame(0);
+ document.getElementById('excap').textContent=
+   `${meta.split} · ${meta.clip} · ${meta.n_frames} frames at ${meta.dt_ms} ms from 2 context frames · rollout ADE ${meta.ade_mm} mm, final frame ${meta.fde_mm} mm`;}
+
+function draw(){
+ const tr=S.splits.train,ev=S.splits.eval,r=ev.ade_mm/tr.ade_mm;
+ document.getElementById('n_ep').textContent=tr.n;
+ const row=(k,a,b,f)=>`<tr><td class="k">${k}</td><td class="tr">${f(a)}</td><td class="ev">${f(b)}</td>`+
+   `<td>${(b/a).toFixed(2)}</td></tr>`;
+ document.getElementById('t_fit').innerHTML=
+   '<tr><th>over the whole clip</th><th>train episodes</th><th>eval episodes</th><th>eval / train</th></tr>'+
+   row('rollout ADE (mm)',tr.ade_mm,ev.ade_mm,v=>v.toFixed(1))+
+   row('error at the last frame (mm)',tr.fde_mm,ev.fde_mm,v=>v.toFixed(1))+
+   row('rollout ADE, one denoising step (mm)',tr.ade_one_shot_mm,ev.ade_one_shot_mm,v=>v.toFixed(1));
+ document.getElementById('verdict').textContent=
+   `${tr.frames} predicted frames (${(tr.frames*S.dt_ms/1000).toFixed(2)} s) from 2 context frames. `+
+   `Eval / train = ${r.toFixed(2)} — `+
+   (r>1.15?'eval is clearly worse, so the model is fitting its training episodes better than held-out ones.'
+    :r<0.87?'eval is easier than train here, so nothing is being memorised; the sampled eval clips are simply milder.'
+    :'the two sit within noise of each other: nothing is being memorised, and both are limited by the same thing.');
+ if(curves)logChart('c_tr','l_tr',[{name:'train loss',color:COL.train,pts:curves.train_loss}],140000,'loss (log)','training step');
+ if(curves)logChart('c_val','l_val',[{name:'val',color:COL.eval,pts:curves.val_loss},
+    {name:'val · EMA',color:'#009E73',pts:curves.val_loss_ema}],140000,'loss (log)','training step');
+ const ms=i=>((i+1)*S.dt_ms);
+ lineChart('c_pf','l_pf',[{name:'train',color:COL.train,pts:tr.per_frame_mm.map((v,i)=>[ms(i),v])},
+                          {name:'eval',color:COL.eval,pts:ev.per_frame_mm.map((v,i)=>[ms(i),v])}],
+           null,'error (mm)','predicted time',v=>`${(v/1000).toFixed(2)} s`);
+ if(H.length)lineChart('c_hist','l_hist',[{name:'train',color:COL.train,pts:H.map(h=>[h.step,h.train_ade])},
+                                          {name:'eval',color:COL.eval,pts:H.map(h=>[h.step,h.eval_ade])}],
+           null,'rollout ADE (mm)','training step',v=>`${Math.round(v/1000)}k`);
+ const pick=document.getElementById('ex_pick');pick.innerHTML='';
+ (S.examples||[]).forEach((e,i)=>{const b=document.createElement('button');
+   b.textContent=`${e.split} · ${e.clip.replace(/^ep_0*/,'ep ').replace(/_shell2048_cube_/,' · ')} · ${e.ade_mm.toFixed(0)} mm`;
+   b.className=i===0?'active':'';
+   b.onclick=()=>{pick.querySelectorAll('button').forEach(x=>x.className='');b.className='active';loadEx(e.dir);};
+   pick.appendChild(b);});}
+
+(async()=>{
+ const v='?t='+Date.now();
+ S=await (await fetch('data/cubedt5/summary.json'+v)).json();
+ try{H=await (await fetch('data/cubedt5/history.json'+v)).json();}catch(e){}
+ try{curves=await (await fetch('data/curves_cubedt5.json'+v)).json();}catch(e){}
+ document.getElementById('status').textContent=
+   `${S.run} — step ${S.step.toLocaleString()} of 140,000 · 2 context frames → ${S.future_len} predicted at ${S.dt_ms} ms · updated ${S.updated}`;
+ draw();
+ if((S.examples||[]).length)await loadEx(S.examples[0].dir);
+ requestAnimationFrame(loop);addEventListener('resize',draw);
+})();
+</script>
+</body>
+</html>

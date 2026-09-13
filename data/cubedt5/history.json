@@ -1,0 +1,32 @@
+[
+ {
+  "step": 18500,
+  "updated": "2026-09-13 02:26 UTC",
+  "train_ade": 212.61,
+  "train_fde": 321.11,
+  "train_ade_one_shot": 252.14,
+  "eval_ade": 268.89,
+  "eval_fde": 402.4,
+  "eval_ade_one_shot": 214.01
+ },
+ {
+  "step": 19000,
+  "updated": "2026-09-13 02:31 UTC",
+  "train_ade": 308.89,
+  "train_fde": 445.85,
+  "train_ade_one_shot": 299.51,
+  "eval_ade": 253.01,
+  "eval_fde": 361.93,
+  "eval_ade_one_shot": 227.74
+ },
+ {
+  "step": 19500,
+  "updated": "2026-09-13 02:36 UTC",
+  "train_ade": 292.3,
+  "train_fde": 420.2,
+  "train_ade_one_shot": 298.07,
+  "eval_ade": 262.62,
+  "eval_fde": 348.95,
+  "eval_ade_one_shot": 228.58
+ }
+]
