@@ -128,5 +128,15 @@
   "eval_ade": 257.66,
   "eval_fde": 321.89,
   "eval_ade_one_shot": 215.64
+ },
+ {
+  "step": 128000,
+  "updated": "2026-09-13 23:16 UTC",
+  "train_ade": 262.25,
+  "train_fde": 381.41,
+  "train_ade_one_shot": 285.37,
+  "eval_ade": 230.72,
+  "eval_fde": 305.52,
+  "eval_ade_one_shot": 220.87
  }
 ]
