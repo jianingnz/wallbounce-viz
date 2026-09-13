@@ -121,11 +121,11 @@ function mk(col){const sc=new THREE.Scene();sc.background=new THREE.Color('#fbfa
  const p=new THREE.Points(geo,new THREE.PointsMaterial({size:0.015,map:sprite,color:col,transparent:true,alphaTest:0.35,sizeAttenuation:true}));
  p.frustumCulled=false;sc.add(p);
  const eg=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1.2,1)),new THREE.LineBasicMaterial({color:0x8e8e93,transparent:true,opacity:0.7}));
- eg.position.set(0,0.6,0);sc.add(eg);
- const gr=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);gr.position.set(0,0,0);sc.add(gr);return{scene:sc,geo};}
+ eg.position.set(0.5,0.6,0.5);sc.add(eg);   // Genesis arena: 1 x 1 m walls, 1.2 m tall
+ const gr=new THREE.GridHelper(1,10,0xc7c7cc,0xe5e5ea);gr.position.set(0.5,0,0.5);sc.add(gr);return{scene:sc,geo};}
 const V_gt=mk(0x0072B2),V_pr=mk(0xD55E00),ov=makeOverlay(V_pr.scene,sprite,0.01);
-const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.5,1.1,1.7);
-const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0,0.35,0);controls.enableDamping=true;
+const camera=new THREE.PerspectiveCamera(42,1,0.01,100);camera.position.set(1.7,1.15,1.85);
+const controls=new THREE.OrbitControls(camera,canvas);controls.target.set(0.5,0.35,0.5);controls.enableDamping=true;
 const clock=makeClock(()=>1);
 let gt=null,pr=null,N=0,T=0,dtms=5,frame=-1,meta=null;
 function setFrame(f){if(!gt)return;frame=f;

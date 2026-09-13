@@ -1,1 +1,1 @@
-{"clip": "ep_00109_shell2048_cube_slam", "split": "eval", "n_frames": 224, "n_particles": 512, "q_lo": -0.8778669238090515, "q_scale": 1.672027349472046, "dt_ms": 5.0, "step": 91500, "ade_mm": 312.19, "fde_mm": 375.2}
+{"clip": "ep_00109_shell2048_cube_slam", "split": "eval", "n_frames": 224, "n_particles": 512, "q_lo": -0.6544579267501831, "q_scale": 1.8135257959365845, "dt_ms": 5.0, "step": 93500, "ade_mm": 493.96, "fde_mm": 866.24}
