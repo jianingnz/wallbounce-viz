@@ -74,7 +74,7 @@
   </div>
   <div class="grid" id="grid_fit"></div>
 
-  <p class="ttl">Error at fixed times <span>autoregressive rollout, chunks of 16 frames, each re-anchored on the model's own last 2 predictions</span></p>
+  <p class="ttl">Error at fixed times <span>autoregressive rollout, chunks of <b id="fl">–</b> frames, each re-anchored on the model's own last 2 predictions</span></p>
   <table id="t_roll"></table>
 
   <p class="ttl">One denoising step vs twenty-five <span>identical weights, identical code path — eval episodes</span></p>
@@ -171,8 +171,9 @@ fetch('data/losses_water.json?t=' + Date.now()).then(r => r.json()).then(D => {
     [sw('--s2') + 'val', 'the same, on 500 held-out episodes'],
     ['EMA weights', 'scored with the EMA-averaged weights (0.9999) — the ones we export'],
     ['velocity error', '\u221A(x\u2080 MSE) in raw units: how far off the per-particle velocity is'],
-    ['dt sampled', 'one per window from ' + M.dt_ladder_ms.join(', ') + ' ms; '
-      + M.held_out_ms.join(' and ') + ' ms never trained'],
+    ['dt sampled', 'one per window from ' + M.dt_ladder_ms.join(', ') + ' ms'
+      + (M.held_out_ms.length ? '; ' + M.held_out_ms.join(' and ') + ' ms never trained'
+                              : ' — the only step size this model trains on')],
   ].map(r => `<tr><td class="k">${r[0]}</td><td class="def">${r[1]}</td></tr>`).join('');
 
   const last = k => D[k][D[k].length - 1][1];
@@ -299,7 +300,7 @@ function fitTable(){
   const f2 = v => v.toFixed(2), f1 = v => v.toFixed(1);
   const SL = EV.rollouts[K].slice, SLT = TR.rollouts[K].slice;
   const rows = [
-    ['single window — one prediction of 16 frames (80 ms)', TR.windows[K].ade_mm, EV.windows[K].ade_mm, f2],
+    [`single window — one prediction of ${EV.future_len} frames (${(EV.future_len*EV.rollouts[K].dt_ms).toFixed(0)} ms)`, TR.windows[K].ade_mm, EV.windows[K].ade_mm, f2],
     ['full rollout — mean error over the whole 1.2 s clip', TR.rollouts[K].ade_mm, EV.rollouts[K].ade_mm, f1],
     ['full rollout — error at the final frame', TR.rollouts[K].fde_mm, EV.rollouts[K].fde_mm, f1],
   ];
@@ -341,6 +342,7 @@ function fitTable(){
      + `${EV.step.toLocaleString()}.`;
   document.getElementById('verdict').innerHTML = v;
   document.getElementById('n_ep').textContent = EV.n_stats;
+  document.getElementById('fl').textContent = EV.future_len;
 }
 function pfChart(){
   const svg = document.getElementById('c_pf'), W = Math.max(svg.clientWidth, 340);

@@ -174,7 +174,7 @@ function clear(host){ tiles = tiles.filter(t => !host.contains(t.el)); host.inne
 function fitTable(){
   const f2 = v => v.toFixed(2), f1 = v => v.toFixed(1);
   const rows = [
-    ['single window — one prediction of 16 frames (80 ms)', TR.windows[K].ade_mm, EV.windows[K].ade_mm, f2],
+    [`single window — one prediction of ${EV.future_len} frames (${(EV.future_len*EV.rollouts[K].dt_ms).toFixed(0)} ms)`, TR.windows[K].ade_mm, EV.windows[K].ade_mm, f2],
     ['full rollout — mean error over 1.2 s', TR.rollouts[K].ade_mm, EV.rollouts[K].ade_mm, f1],
     ['full rollout — error at the final frame', TR.rollouts[K].fde_mm, EV.rollouts[K].fde_mm, f1],
   ];

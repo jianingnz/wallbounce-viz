@@ -111,8 +111,9 @@ fetch('data/losses_robert_cube.json?t=' + Date.now()).then(r => r.json()).then(D
     [sw('--s2') + 'val', 'the same, on 500 held-out episodes'],
     ['EMA weights', 'scored with the EMA-averaged weights (0.9999) — the ones we export'],
     ['velocity error', '\u221A(x\u2080 MSE) in raw units: how far off the per-particle velocity is'],
-    ['dt sampled', 'one per window from ' + M.dt_ladder_ms.join(', ') + ' ms; '
-      + M.held_out_ms.join(' and ') + ' ms never trained'],
+    ['dt sampled', 'one per window from ' + M.dt_ladder_ms.join(', ') + ' ms'
+      + (M.held_out_ms.length ? '; ' + M.held_out_ms.join(' and ') + ' ms never trained'
+                              : ' — the only step size this model trains on')],
   ].map(r => `<tr><td class="k">${r[0]}</td><td class="def">${r[1]}</td></tr>`).join('');
 
   const last = k => D[k][D[k].length - 1][1];
