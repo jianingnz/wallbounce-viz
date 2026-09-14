@@ -68,7 +68,7 @@ addEventListener('pointerdown', e => { controls.enabled = !!e.target.closest('.v
 
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   controls.enableZoom = false; controls.enablePan = false;
-  controls.maxPolarAngle = Math.PI / 2 - 0.02;
+  controls.maxPolarAngle = Math.PI;
   controls.target.set(0.5, 0.25, 0.5);
 
   function render(){

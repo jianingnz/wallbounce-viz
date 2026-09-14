@@ -68,7 +68,7 @@
     const renderer = new THREE.WebGLRenderer({canvas, antialias: true}); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     const camera = new THREE.PerspectiveCamera(36, 1, 0.01, 100);
     const controls = new THREE.OrbitControls(camera, canvas); controls.enableDamping = true; controls.dampingFactor = 0.08;
-    controls.minDistance = 0.2; controls.maxDistance = 6; controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    controls.minDistance = 0.2; controls.maxDistance = 6; controls.maxPolarAngle = Math.PI;
     const vx = meta.v0[0], vz = meta.v0[1], sp = Math.hypot(vx, vz);
     const bx = sp > 0.1 ? -vx / sp : (meta.spawn_pos[0] < 0.5 ? -1 : 1), bz = sp > 0.1 ? -vz / sp : (meta.spawn_pos[1] < 0.5 ? -1 : 1);
     camera.position.set(0.5 + bx * 1.35 - bz * 0.9, 0.95, 0.5 + bz * 1.35 + bx * 0.9); controls.target.set(0.5, 0.22, 0.5);
