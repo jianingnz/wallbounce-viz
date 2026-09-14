@@ -38,6 +38,20 @@
 <canvas id="bg"></canvas>
 <div class="wrap">
 
+  <p class="ttl">Training episodes vs eval episodes
+    <span>same checkpoint and protocol on both splits &mdash; does it fit the data, and does it generalize?</span></p>
+  <table id="t_fit"></table>
+  <p class="note" id="fit_verdict"></p>
+  <div class="g2">
+    <div><svg id="c_fw" style="height:270px"></svg><div class="leg" id="l_fw"></div></div>
+    <div><svg id="c_fr" style="height:270px"></svg><div class="leg" id="l_fr"></div></div>
+  </div>
+  <div class="ctl">
+    <label>step size <select id="fdt"></select></label>
+    <span class="leg" id="fleg"></span>
+  </div>
+  <div class="g4" id="grid_fit"></div>
+
   <p class="ttl">Autoregressive rollout at every trained step size
     <span>same episode, same 400 ms of physics, same playback time — from 2 ground-truth frames only</span></p>
   <div class="ctl">
@@ -81,6 +95,7 @@
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const V = '?t=' + Date.now();
+const EVB = 'frsperf', TRB = 'frsperf_train';   // eval and training-split exports
 const GT_COL = '#b9b4ab', PR_COL = '#d4762c', HO_COL = '#c0392b', ALT = ['#1f5f8b','#3d8b5a','#7a5aa6'];
 const HORIZON = 400;                      // ms of physics every tile covers
 let SPEED = 8;                            // wall-clock ms per physical ms
@@ -160,33 +175,33 @@ function loop(ts){
 
 // ---- data
 const cache = new Map();
-async function loadBin(dir, name, meta){
-  const key = dir+'/'+name;
+async function loadBin(dir, name, meta, base=EVB){
+  const key = base+'/'+dir+'/'+name;
   if (cache.has(key)) return cache.get(key);
-  const raw = new Uint16Array(await (await fetch(`data/frsperf/roll/${dir}/${name}.bin`+V)).arrayBuffer());
+  const raw = new Uint16Array(await (await fetch(`data/${base}/roll/${dir}/${name}.bin`+V)).arrayBuffer());
   const out = new Float32Array(raw.length);
   const lo = meta.q_lo, sc = meta.q_scale/65535;
   for (let i=0;i<raw.length;i++) out[i] = lo + raw[i]*sc;
   cache.set(key, out); return out;
 }
-async function meta(dir){
-  const key = dir+'/meta';
-  if (!cache.has(key)) cache.set(key, await (await fetch(`data/frsperf/roll/${dir}/meta.json`+V)).json());
+async function meta(dir, base=EVB){
+  const key = base+'/'+dir+'/meta';
+  if (!cache.has(key)) cache.set(key, await (await fetch(`data/${base}/roll/${dir}/meta.json`+V)).json());
   return cache.get(key);
 }
 
 /* Build one tile: `layers` is [{bin, color, size}] drawn into the same scene.
    Ground truth is always the pale layer underneath. */
-async function tile(host, dir, caption, layers, hoBorder){
+async function tile(host, dir, caption, layers, hoBorder, base=EVB){
   const fig = document.createElement('figure'); fig.className = 'tile';
   fig.innerHTML = `<div class="view${hoBorder?' ho':''}"></div><figcaption>${caption}</figcaption>`;
   host.appendChild(fig);
   const el = fig.querySelector('.view');
-  const m = await meta(dir);
+  const m = await meta(dir, base);
   const sc = arena(1.2);
   const clouds = [];
   for (const L of layers){
-    const data = await loadBin(dir, L.bin, m);
+    const data = await loadBin(dir, L.bin, m, base);
     clouds.push({geo: cloud(sc, L.color, L.size), data});
   }
   const t = {el, scene: sc, clouds, meta: m, f: -1, buf: true};
@@ -327,10 +342,91 @@ function sectionWIN(){
   document.getElementById('t_win').innerHTML = h;
 }
 
+
+// ---- training vs eval (both splits, numbers and clips)
+let TR = null;
+function fitRungs(){
+  return Object.keys(S.rollouts).map(Number)
+    .filter(k => !S.rollouts[k].held_out && TR && TR.rollouts[k]).sort((a,b)=>a-b);
+}
+function fitTable(){
+  const ks = fitRungs(); if (!ks.length) return;
+  const row = (lab, get) => '<tr><td class="k">'+lab+'</td>' + ks.map(k=>`<td>${get(k)}</td>`).join('') + '</tr>';
+  let h = '<tr><th>step size</th>' + ks.map(k=>`<th>${S.rollouts[k].dt_ms} ms</th>`).join('') + '</tr>';
+  h += row('window · training', k => TR.windows[k].ade_mm.toFixed(2));
+  h += row('window · eval',     k => S.windows[k].ade_mm.toFixed(2));
+  h += row('ratio',             k => (S.windows[k].ade_mm/TR.windows[k].ade_mm).toFixed(2)+'×');
+  h += row('rollout · training',k => TR.rollouts[k].ade_mm.toFixed(1));
+  h += row('rollout · eval',    k => S.rollouts[k].ade_mm.toFixed(1));
+  h += row('ratio',             k => (S.rollouts[k].ade_mm/TR.rollouts[k].ade_mm).toFixed(2)+'×');
+  document.getElementById('t_fit').innerHTML = h;
+  const mean = a => a.reduce((x,y)=>x+y,0)/a.length;
+  const rW = mean(ks.map(k=>S.windows[k].ade_mm/TR.windows[k].ade_mm));
+  const rR = mean(ks.map(k=>S.rollouts[k].ade_mm/TR.rollouts[k].ade_mm));
+  let v = `Averaged over the trained step sizes, eval error is <b>${rW.toFixed(2)}×</b> the training-episode `
+        + `error on a single window and <b>${rR.toFixed(2)}×</b> over a full rollout. `;
+  v += rR > 1.10 ? 'Eval is clearly worse than training: the model fits its training episodes better than new ones, '
+                 + 'which is <b>overfitting</b>. '
+     : rR < 0.90 ? 'Eval is <i>better</i> than training — no overfitting; if anything the model is <b>underfitting</b>. '
+     : 'That is inside sampling noise, so there is <b>no measurable generalization gap</b> — not overfitting, and '
+     + 'further gains have to come from fitting the data better rather than from regularization. ';
+  v += `${S.n_stats} episodes per split, identical anchors and protocol, checkpoint ${S.ckpt} at step `
+     + `${S.step.toLocaleString()}.`;
+  document.getElementById('fit_verdict').innerHTML = v;
+}
+function fitChart(id, legId, group, ylab){
+  const svg = document.getElementById(id), W = Math.max(svg.clientWidth, 340);
+  const H = svg.clientHeight || 270, L = 66, R = 18, Tp = 12, B = 30;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const ks = fitRungs(); if (!ks.length) return;
+  const series = [{name:'training episodes', color:css('--s3'), D:TR, dash:true},
+                  {name:'eval episodes', color:css('--s1'), D:S}]
+    .map(s => ({...s, pts: ks.map(k => [s.D[group][k].dt_ms, s.D[group][k].ade_mm])}));
+  const vals = series.flatMap(s => s.pts.map(p=>p[1])), xs = series[0].pts.map(p=>p[0]);
+  const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
+  const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const X = d => L+(W-L-R)*(Math.log10(d)-Math.log10(x0))/(Math.log10(x1)-Math.log10(x0) || 1);
+  const Y = v => Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+  let g = '';
+  for (let d=lo; d<=hi*1.0001; d*=10)
+    g += `<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/>`
+       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+  for (const d of xs)
+    g += `<text x="${X(d)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${d}</text>`;
+  g += `<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" text-anchor="middle"
+        transform="rotate(-90 14 ${Tp+(H-Tp-B)/2})">${ylab}</text>`;
+  for (const s of series){
+    g += `<path d="${s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')}"
+           fill="none" stroke="${s.color}" stroke-width="2" ${s.dash?'stroke-dasharray="5 4"':''}/>`;
+    for (const p of s.pts) g += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.6" fill="${s.color}"/>`;
+  }
+  svg.innerHTML = g;
+  document.getElementById(legId).innerHTML =
+    series.map(s=>`<span style="background:${s.color}"></span>${s.name}`).join('');
+}
+async function fitGallery(){
+  const host = document.getElementById('grid_fit'); clear(host);
+  if (!TR) return;
+  const k = document.getElementById('fdt').value;
+  document.getElementById('fleg').innerHTML =
+    `<span style="background:${GT_COL}"></span>ground truth`
+    + `<span style="background:${css('--s3')}"></span>model, training episode`
+    + `<span style="background:${css('--s1')}"></span>model, eval episode`;
+  for (const [base, D, col, lab] of [[TRB, TR, css('--s3'), 'training episode'],
+                                     [EVB, S,  css('--s1'), 'eval episode']])
+    for (const clip of Object.keys(D.grid).slice(0, 2)){
+      const r = D.grid[clip][k]; if (!r) continue;
+      await tile(host, r.dir, `<b>${lab}</b> · ${clip.split('_')[0]} · ${r.dt_ms} ms · ${r.ade_mm} mm`,
+        [{bin:'gt', color:GT_COL, size:0.014}, {bin:'pred', color:col, size:0.015}], false, base);
+    }
+}
+
 // ---- boot
 let EP = null, EP2 = null;
 (async function(){
-  S = await (await fetch('data/frsperf/summary.json'+V)).json();
+  S = await (await fetch(`data/${EVB}/summary.json`+V)).json();
+  TR = await (await fetch(`data/${TRB}/summary.json`+V)).json().catch(()=>null);
   const epSel = document.getElementById('ep'), ep2Sel = document.getElementById('ep2');
   const name = c => { const e = S.episodes.find(x=>x.clip===c);
     return c.split('_')[0] + ' · ' + e.scenario + (e.pinned ? ' · corner splash' : ''); };
@@ -347,10 +443,18 @@ let EP = null, EP2 = null;
   ep2Sel.onchange = async () => { EP2 = ep2Sel.value; await sectionSAMP(); };
   dt2.onchange = sectionSAMP;
 
+  const fdt = document.getElementById('fdt');
+  for (const k of fitRungs()) fdt.add(new Option(S.rollouts[k].dt_ms + ' ms', String(k)));
+  fdt.value = String(fitRungs().find(k => S.rollouts[k].dt_ms === 20) ?? fitRungs()[0]);
+  fdt.onchange = fitGallery;
+  fitTable(); fitChart('c_fw','l_fw','windows','window error (mm)');
+  fitChart('c_fr','l_fr','rollouts','rollout error (mm)');
   sectionROLL(); sectionWIN();
-  addEventListener('resize', () => { sectionROLL(); sectionWIN(); });
+  addEventListener('resize', () => { sectionROLL(); sectionWIN();
+    fitChart('c_fw','l_fw','windows','window error (mm)');
+    fitChart('c_fr','l_fr','rollouts','rollout error (mm)'); });
   requestAnimationFrame(loop);
-  await sectionDT(); await sectionHO(); await sectionSAMP();
+  await fitGallery(); await sectionDT(); await sectionHO(); await sectionSAMP();
 })();
 })();
 </script>
