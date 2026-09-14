@@ -62,7 +62,7 @@
   <table id="t_fin"></table>
 
   <p class="ttl">Training episodes vs eval episodes
-    <span>same checkpoint, same protocol, <b id="n_ep">–</b> episodes per split, 5 ms steps from 2 ground-truth frames</span></p>
+    <span>same checkpoint, same protocol, <b id="n_ep">–</b> episodes per split, 5 ms steps from 2 ground-truth frames, sampled with <b id="samp">–</b></span></p>
   <table id="t_fit"></table>
   <p class="note" id="verdict"></p>
   <p class="ttl" style="font-size:16px;margin-top:22px">Error along the rollout
@@ -77,7 +77,7 @@
   <p class="ttl">Error at fixed times <span>autoregressive rollout, chunks of <b id="fl">–</b> frames, each re-anchored on the model's own last 2 predictions</span></p>
   <table id="t_roll"></table>
 
-  <p class="ttl">One denoising step vs twenty-five <span>identical weights, identical code path — eval episodes</span></p>
+  <p class="ttl">Samplers side by side <span>identical weights, identical code path, eval episodes — twenty-five steps is what the numbers above report</span></p>
   <div class="ctl"><label>episode <select id="ep2"></select></label></div>
   <div class="g4" id="grid_s"></div>
   <table id="t_s"></table>
@@ -314,6 +314,14 @@ function fitTable(){
   let h = '<tr><th>error (mm)</th><th>training episodes</th><th>eval episodes</th><th>eval ÷ training</th></tr>';
   for (const [lab, a, b, fm] of rows)
     h += `<tr><td class="k">${lab}</td><td>${fm(a)}</td><td>${fm(b)}</td><td><b>${(b/a).toFixed(2)}×</b></td></tr>`;
+  const OW = EV.windows_oneshot && EV.windows_oneshot[K], OWT = TR.windows_oneshot && TR.windows_oneshot[K];
+  const OR = EV.rollouts_oneshot && EV.rollouts_oneshot[K], ORT = TR.rollouts_oneshot && TR.rollouts_oneshot[K];
+  if (OW && OWT) h += `<tr><td class="k ref">the same window from one denoising pass — the model's mean, `
+    + `not a sample</td><td class="ref">${f2(OWT.ade_mm)}</td><td class="ref">${f2(OW.ade_mm)}</td>`
+    + `<td class="ref">${(OW.ade_mm/OWT.ade_mm).toFixed(2)}×</td></tr>`;
+  if (OR && ORT) h += `<tr><td class="k ref">the same rollout from one denoising pass</td>`
+    + `<td class="ref">${f1(ORT.ade_mm)}</td><td class="ref">${f1(OR.ade_mm)}</td>`
+    + `<td class="ref">${(OR.ade_mm/ORT.ade_mm).toFixed(2)}×</td></tr>`;
   document.getElementById('t_fit').innerHTML = h;
 
   const rW = EV.windows[K].ade_mm/TR.windows[K].ade_mm, rR = EV.rollouts[K].ade_mm/TR.rollouts[K].ade_mm;
@@ -329,12 +337,19 @@ function fitTable(){
     v += 'That is within sampling noise, so there is <b>no measurable generalization gap</b>: the model does '
        + 'as well on episodes it never saw as on ones it trained on. It is not overfitting — gains have to come '
        + 'from fitting the data better (more capacity or more training), not from regularization. ';
+  if (OR && EV.main_sampler)
+    v += `Every number above is the <b>${EV.main_sampler}</b> sampler — an actual draw from the model. `
+       + `A single denoising pass returns the conditional mean instead, which scores `
+       + `<b>${(OR.ade_mm/EV.rollouts[K].ade_mm).toFixed(2)}×</b> on this rollout: lower error, because the `
+       + `mean is the L2-optimal point estimate, but an averaged particle cloud is not a state the `
+       + `simulator could ever be in. `;
   v += `Trained for one epoch (each 5 ms window drawn about once on average), so "training episodes" measures `
      + `fit, not memorization. ${EV.n_stats} episodes per split, checkpoint ${EV.ckpt} at step `
      + `${EV.step.toLocaleString()}.`;
   document.getElementById('verdict').innerHTML = v;
   document.getElementById('n_ep').textContent = EV.n_stats;
   document.getElementById('fl').textContent = EV.future_len;
+  document.getElementById('samp').textContent = EV.main_sampler || 'one denoising pass';
 }
 function pfChart(){
   const svg = document.getElementById('c_pf'), W = Math.max(svg.clientWidth, 340);
@@ -400,15 +415,17 @@ let EP2 = null;
 async function sectionSAMP(){
   const host = document.getElementById('grid_s'); clear(host);
   const r = EV.grid[EP2] && EV.grid[EP2][K]; if (!r) return;
-  const NAME = {draw1_25step: '25 steps', pyramid_25step: 'pyramid, 25 steps'};
+  const NAME = {oneshot: 'one denoising pass', draw1_25step: '25 steps, another seed',
+                pyramid_25step: 'pyramid, 25 steps'};
   const shown = (r.variants || []).filter(v => v.name in NAME);
-  const arms = [{bin:'pred', name:'one step', ade:r.ade_mm, col:PR_COL}]
+  const arms = [{bin:'pred', name: EV.main_sampler || '25 steps', ade:r.ade_mm, col:PR_COL}]
     .concat(shown.map((v,i) => ({bin:v.name, name:NAME[v.name], ade:v.ade_mm, col:ALT[i%3]})));
   for (const a of arms)
     await tile(host, EVB, r.dir, `<b>${a.name}</b> · ${a.ade} mm`,
       [{bin:'gt', color:GT_COL, size:0.014}, {bin:a.bin, color:a.col, size:0.015}]);
   let h = '<tr><th>sampler</th><th>rollout ADE (mm)</th><th>final error (mm)</th></tr>'
-        + `<tr><td class="k">one step — a single pass at t=999</td><td>${r.ade_mm}</td><td>${r.fde_mm}</td></tr>`;
+        + `<tr><td class="k">${EV.main_sampler || '25 steps'} — what this page reports</td>`
+        + `<td>${r.ade_mm}</td><td>${r.fde_mm}</td></tr>`;
   for (const v of shown) h += `<tr><td class="k">${NAME[v.name]}</td><td>${v.ade_mm}</td><td>${v.fde_mm}</td></tr>`;
   document.getElementById('t_s').innerHTML = h;
 }
