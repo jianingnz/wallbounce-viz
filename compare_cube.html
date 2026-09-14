@@ -50,7 +50,8 @@
     lines sit late in the clip says more about how far apart two plausible futures drift than about
     which model is more accurate.</p>
 
-  <p class="ttl">Sampler by sampler <span>eval episodes, identical code path</span></p>
+  <p class="ttl">Sampler by sampler <span>eval episodes, identical code path — the table above reads
+    the one row both models have</span></p>
   <table id="t_dt"></table>
 
   <p class="ttl">Same episode, both models <span>from 2 ground-truth frames, the whole 1.2 s</span></p>
@@ -174,26 +175,41 @@ async function tile(host, base, dir, caption, layers, cls){
 function clear(host){ tiles = tiles.filter(t => !host.contains(t.el)); host.innerHTML = ''; }
 
 // ---- top: both models, both splits, averaged over the shared trained rungs
+// Which arm of an export is which sampler. An export with no `main_sampler` predates
+// the 25-step switch, so its `rollouts` ARE one-shot -- comparing that against another
+// model's 25-step would hand it the free ADE advantage the conditional mean enjoys.
+const armOne  = (D, g) => !D ? null : (D[g+'_oneshot']||{})[K] || (D.main_sampler ? null : D[g][K]);
+const arm25   = (D, g) => !D || !D.main_sampler ? null : D[g][K];
+const bothHave = f => f(N,'rollouts') && f(O,'rollouts');
+let COMMON = null;               // the sampler both models actually ran
+
 function fitTable(){
+  COMMON = bothHave(arm25) ? '25' : 'one';
+  const A = COMMON === '25' ? arm25 : armOne;
+  const label = COMMON === '25' ? (N.main_sampler || '25 steps') : 'one denoising pass';
   const f1 = v => v == null ? '—' : v.toFixed(1), f2 = v => v == null ? '—' : v.toFixed(2);
-  const get = (D, grp, os) => !D ? null : (os ? (D[grp+'_oneshot']||{})[K] : D[grp][K]);
   const line = (lab, a, b, fm, win, cls) => `<tr><td class="k ${cls||''}">${lab}</td>`
     + `<td class="${cls||''}">${fm(a)}</td><td class="${win?'win':''} ${cls||''}">${fm(b)}</td>`
     + `<td class="${cls||''}">${a&&b ? (b/a).toFixed(2)+'×' : '—'}</td></tr>`;
 
-  const nR = get(N,'rollouts'), oR = get(O,'rollouts');
-  const better = D => nR && oR && ((D==='N') === (nR.ade_mm < oR.ade_mm));
-  let h = '<tr><th>error (mm)</th><th>training episodes</th><th>eval episodes</th>'
+  const nR = A(N,'rollouts'), oR = A(O,'rollouts');
+  const win = which => nR && oR && ((which==='N') === (nR.ade_mm < oR.ade_mm));
+  let h = `<tr><th>error (mm) — ${label}</th><th>training episodes</th><th>eval episodes</th>`
         + '<th>eval ÷ training</th></tr>';
-  for (const [grp, lab, fm] of [['windows', 'single window — one prediction', f2],
-                                ['rollouts', 'full rollout — mean over the clip', f1]]){
-    h += line(`<b>331 M</b> · ${lab}`, get(NTR,grp)?.ade_mm, get(N,grp)?.ade_mm, fm,
-              grp==='rollouts' && better('N'));
-    h += line(`39 M · ${lab}`, get(OTR,grp)?.ade_mm, get(O,grp)?.ade_mm, fm,
-              grp==='rollouts' && better('O'));
+  for (const [g, lab, fm] of [['windows','single window — one prediction', f2],
+                              ['rollouts','full rollout — mean over the clip', f1]]){
+    h += line(`<b>331 M</b> · ${lab}`, A(NTR,g)?.ade_mm, A(N,g)?.ade_mm, fm, g==='rollouts'&&win('N'));
+    h += line(`39 M · ${lab}`,        A(OTR,g)?.ade_mm, A(O,g)?.ade_mm, fm, g==='rollouts'&&win('O'));
   }
-  h += line('<b>331 M</b> · error at the final frame', get(NTR,'rollouts')?.fde_mm, nR?.fde_mm, f1);
-  h += line('39 M · error at the final frame', get(OTR,'rollouts')?.fde_mm, oR?.fde_mm, f1);
+  h += line('<b>331 M</b> · error at the final frame', A(NTR,'rollouts')?.fde_mm, nR?.fde_mm, f1);
+  h += line('39 M · error at the final frame',        A(OTR,'rollouts')?.fde_mm, oR?.fde_mm, f1);
+  // the 25-step arm, where only one model has it, as supplementary -- never in the ratio above
+  if (COMMON === 'one'){
+    const n25 = arm25(N,'rollouts'), n25t = arm25(NTR,'rollouts');
+    if (n25) h += line(`331 M · the same rollout at ${N.main_sampler} <span style="color:var(--soft)">`
+                       + '· the 39 M has not been run at this sampler</span>',
+                       n25t?.ade_mm, n25.ade_mm, f1, false, 'ref');
+  }
   document.getElementById('t_fit').innerHTML = h;
 
   let v = '';
@@ -202,22 +218,30 @@ function fitTable(){
     const word = g < 0.95 ? `<b>${((1-g)*100).toFixed(0)}% better</b>`
                : g > 1.05 ? `<b>${((g-1)*100).toFixed(0)}% worse</b>` : '<b>level with it</b>';
     v += `Over a full rollout on eval episodes the 331 M is ${word} than our 39 M `
-       + `(${nR.ade_mm.toFixed(1)} vs ${oR.ade_mm.toFixed(1)} mm). `;
-    if (Math.abs(1-g) < 0.05)
-      v += 'The two are 8.5× apart in parameters, so a gap this small is the interesting result: '
+       + `(${nR.ade_mm.toFixed(1)} vs ${oR.ade_mm.toFixed(1)} mm), both read at the one sampler `
+       + `both models have been run at — <b>${label}</b>. `;
+    const wN = A(N,'windows'), wO = A(O,'windows');
+    if (wN && wO)
+      v += `On a single ${N.future_len}-frame prediction the gap is wider: `
+         + `${wN.ade_mm.toFixed(2)} vs ${wO.ade_mm.toFixed(2)} mm `
+         + `(${(wN.ade_mm/wO.ade_mm).toFixed(2)}×). `;
+    if (g > 1.0)
+      v += 'The larger model is <b>not</b> ahead. With 8.5× the parameters, the same data and the '
+         + 'same number of steps, capacity is evidently not what limits this task. ';
+    else if (Math.abs(1-g) < 0.05)
+      v += 'The two are 8.5× apart in parameters, so a gap this small is itself the result: '
          + 'capacity is not what limits this task. ';
   }
-  const gap = D => { const a = get(D==='N'?NTR:OTR,'rollouts'), b = get(D==='N'?N:O,'rollouts');
-                     return a && b ? b.ade_mm/a.ade_mm : null; };
-  const gN = gap('N'), gO = gap('O');
+  const ratio = D1 => { const a = A(D1==='N'?NTR:OTR,'rollouts'), b = A(D1==='N'?N:O,'rollouts');
+                        return a && b ? b.ade_mm/a.ade_mm : null; };
+  const gN = ratio('N'), gO = ratio('O');
   if (gN && gO)
     v += `Neither is memorising: eval ÷ training is ${gN.toFixed(2)}× for the 331 M and `
        + `${gO.toFixed(2)}× for the 39 M. `;
-  if (N && O)
+  if (nR)
     v += `Both scored on the same ${N.n_stats} episodes per split with the same code, the same `
-       + `${nR.scored_ms.toFixed(0)} ms horizon and the same sampler `
-       + `(${N.main_sampler || '25-step full_sequence'}), from each model's final checkpoint `
-       + `(${N.step.toLocaleString()} and ${O.step.toLocaleString()} steps).`;
+       + `${nR.scored_ms.toFixed(0)} ms horizon and the same 2-frame context, from each model's `
+       + `final checkpoint (${N.step.toLocaleString()} and ${O.step.toLocaleString()} steps).`;
   document.getElementById('verdict').innerHTML = v;
 }
 
@@ -226,8 +250,8 @@ function pfChart(){
   const svg = document.getElementById('c_pf'), W = Math.max(svg.clientWidth, 340);
   const H = svg.clientHeight || 320, L = 66, R = 18, Tp = 12, B = 30;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const pts = D => !D || !D.rollouts[K] ? [] :
-    D.rollouts[K].per_frame_mm.map((e,j) => [(j+1)*D.rollouts[K].dt_ms, e]);
+  const A = COMMON === '25' ? arm25 : armOne;
+  const pts = D => { const r = A(D,'rollouts'); return r ? r.per_frame_mm.map((e,j) => [(j+1)*r.dt_ms, e]) : []; };
   const series = [
     {name:'331 M · training', color:'#7fae93', pts:pts(NTR), dash:true, w:1.4},
     {name:'331 M · eval',     color:css('--s3'), pts:pts(N)},
@@ -258,30 +282,29 @@ function pfChart(){
 
 // ---- sampler by sampler, eval
 function dtTable(){
-  const NAME = {oneshot:'one denoising pass', draw2_25step:'25 steps, another seed',
-                pyramid_25step:'pyramid, 25 steps'};
-  const main = D => D && D.rollouts[K] ? {lab: D.main_sampler || '25 steps', ade: D.rollouts[K].ade_mm,
-                                          fde: D.rollouts[K].fde_mm} : null;
-  const os = D => { const r = D && (D.rollouts_oneshot||{})[K];
-                    return r ? {lab:'one denoising pass', ade:r.ade_mm, fde:r.fde_mm} : null; };
+  const row = (lab, a, b, note) =>
+    `<tr><td class="k">${lab}${note?` <span style="color:var(--soft)">· ${note}</span>`:''}</td>`
+    + `<td>${a?a.ade_mm.toFixed(1):'—'}</td><td>${b?b.ade_mm.toFixed(1):'—'}</td>`
+    + `<td>${a?a.fde_mm.toFixed(1):'—'}</td><td>${b?b.fde_mm.toFixed(1):'—'}</td></tr>`;
   let h = '<tr><th>sampler</th><th>331 M · mean</th><th>39 M · mean</th><th>331 M · final</th>'
         + '<th>39 M · final</th></tr>';
-  for (const f of [main, os]){
-    const a = f(N), b = f(O); if (!a && !b) continue;
-    h += `<tr><td class="k">${(a||b).lab}</td><td>${a?a.ade.toFixed(1):'—'}</td>`
-       + `<td>${b?b.ade.toFixed(1):'—'}</td><td>${a?a.fde.toFixed(1):'—'}</td>`
-       + `<td>${b?b.fde.toFixed(1):'—'}</td></tr>`;
-  }
-  // per-clip variants, averaged over the showcase episodes each export wrote
-  const vAvg = (D, name) => { const xs = Object.values(D.grid||{})
-      .map(r => (r[K]||{}).variants || []).flat().filter(v => v.name===name).map(v=>v.ade_mm);
-    return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null; };
-  for (const nm of ['draw2_25step','pyramid_25step']){
-    const a = N && vAvg(N,nm), b = O && vAvg(O,nm);
-    if (a == null && b == null) continue;
-    h += `<tr><td class="k ref">${NAME[nm]} <span style="color:var(--soft)">· showcase clips only</span></td>`
-       + `<td class="ref">${a!=null?a.toFixed(1):'—'}</td><td class="ref">${b!=null?b.toFixed(1):'—'}</td>`
-       + `<td class="ref">—</td><td class="ref">—</td></tr>`;
+  h += row('one denoising pass — the conditional mean', armOne(N,'rollouts'), armOne(O,'rollouts'),
+           COMMON === 'one' ? 'the row the comparison above uses' : '');
+  const n25 = arm25(N,'rollouts'), o25 = arm25(O,'rollouts');
+  if (n25 || o25)
+    h += row('25 steps — an actual draw', n25, o25,
+             (n25 && !o25) ? 'the 39 M has not been re-exported at this sampler' : '');
+  // per-clip variants, averaged over whichever showcase clips each export wrote
+  const vAvg = (D, name) => { if (!D) return null;
+    const xs = Object.values(D.grid||{}).map(r => (r[K]||{}).variants || []).flat()
+      .filter(v => v.name===name).map(v=>v.ade_mm);
+    return xs.length ? {ade_mm: xs.reduce((a,b)=>a+b,0)/xs.length, fde_mm: null} : null; };
+  for (const [nm, lab] of [['draw2_25step','25 steps, another seed'],
+                           ['pyramid_25step','pyramid, 25 steps']]){
+    const a = vAvg(N,nm), b = vAvg(O,nm); if (!a && !b) continue;
+    h += `<tr><td class="k ref">${lab} <span style="color:var(--soft)">· showcase clips only</span></td>`
+       + `<td class="ref">${a?a.ade_mm.toFixed(1):'—'}</td><td class="ref">${b?b.ade_mm.toFixed(1):'—'}</td>`
+       + '<td class="ref">—</td><td class="ref">—</td></tr>';
   }
   document.getElementById('t_dt').innerHTML = h;
 }

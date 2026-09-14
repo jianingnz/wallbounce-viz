@@ -188,8 +188,9 @@ function fitTable(){
     + `mean, not a sample</td><td class="ref">${f1(ORT.ade_mm)}</td><td class="ref">${f1(OR.ade_mm)}</td>`
     + `<td class="ref">${(OR.ade_mm/ORT.ade_mm).toFixed(2)}×</td></tr>`;
   if (RT && RE && RT.rollouts[K] && RE.rollouts[K])
-    h += `<tr><td class="k ref">for reference: the wide-Δt cube model (c2f6_cube — mixed step sizes, 6 frames) `
-       + `at the same 5 ms step, same episodes, full rollout</td><td class="ref">${f1(RT.rollouts[K].ade_mm)}</td>`
+    h += `<tr><td class="k ref">for reference: the wide-Δt cube model (c2f6_cube — mixed step sizes, 6 frames), `
+       + `scored with one denoising pass, so read it against this model's one-shot row rather than its 25-step one, `
+       + `at the same 5 ms step and the same episodes</td><td class="ref">${f1(RT.rollouts[K].ade_mm)}</td>`
        + `<td class="ref">${f1(RE.rollouts[K].ade_mm)}</td>`
        + `<td class="ref">${(RE.rollouts[K].ade_mm/RT.rollouts[K].ade_mm).toFixed(2)}×</td></tr>`;
   document.getElementById('t_fit').innerHTML = h;
