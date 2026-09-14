@@ -191,7 +191,8 @@ fetch('data/losses_water.json?t=' + Date.now()).then(r => r.json()).then(D => {
 
 const V = '?t=' + Date.now();
 const GT_COL = '#b9b4ab', PR_COL = '#d4762c', ALT = ['#1f5f8b','#3d8b5a','#7a5aa6'];
-const HORIZON = 400, N_TILE = 4;          // matches the 400 ms export horizon (sand parity)
+const HORIZON = 1200, N_TILE = 4;         // the whole clip: 480 frames at 2.5 ms. 1,190 ms of
+                                          // it is scored; the rest would need frames that do not exist
 const ARENA = 0.35, WALL_H = 0.6;         // water box is 0.35 x 0.35 m; walls are really 1.2 m
                                           // tall but the water rarely passes 0.6, so draw that
 const EVB = 'waterperf', TRB = 'waterperf_train';
@@ -295,17 +296,22 @@ function clear(host){ tiles = tiles.filter(t => !host.contains(t.el)); host.inne
 // ---- top: training vs eval
 function fitTable(){
   const f2 = v => v.toFixed(2), f1 = v => v.toFixed(1);
+  const SL = EV.rollouts[K].slice, SLT = TR.rollouts[K].slice;
   const rows = [
     ['single window — one prediction of 16 frames (80 ms)', TR.windows[K].ade_mm, EV.windows[K].ade_mm, f2],
-    ['full rollout — mean error over 1.2 s', TR.rollouts[K].ade_mm, EV.rollouts[K].ade_mm, f1],
+    ['full rollout — mean error over the whole 1.2 s clip', TR.rollouts[K].ade_mm, EV.rollouts[K].ade_mm, f1],
     ['full rollout — error at the final frame', TR.rollouts[K].fde_mm, EV.rollouts[K].fde_mm, f1],
   ];
+  if (SL && SLT)
+    rows.splice(2, 0, ['… its first 400 ms — the same trajectory, truncated',
+                       SLT.ade_mm, SL.ade_mm, f1]);
   let h = '<tr><th>error (mm)</th><th>training episodes</th><th>eval episodes</th><th>eval ÷ training</th></tr>';
   for (const [lab, a, b, fm] of rows)
     h += `<tr><td class="k">${lab}</td><td>${fm(a)}</td><td>${fm(b)}</td><td><b>${(b/a).toFixed(2)}×</b></td></tr>`;
   if (RT && RE && RT.rollouts[K] && RE.rollouts[K])
-    h += `<tr><td class="k ref">for reference: previous cube model (c2f6_cube — mixed step sizes, 6 frames) `
-       + `at the same 5 ms step, same episodes, full rollout</td><td class="ref">${f1(RT.rollouts[K].ade_mm)}</td>`
+    h += `<tr><td class="k ref">for scale: the cube model (c2f6_cube) stepped at 5 ms over its own `
+       + `1.2 s clips — a different material in a 1.0 m arena, so a difficulty reference, not a `
+       + `like-for-like comparison</td><td class="ref">${f1(RT.rollouts[K].ade_mm)}</td>`
        + `<td class="ref">${f1(RE.rollouts[K].ade_mm)}</td>`
        + `<td class="ref">${(RE.rollouts[K].ade_mm/RT.rollouts[K].ade_mm).toFixed(2)}×</td></tr>`;
   document.getElementById('t_fit').innerHTML = h;
@@ -324,9 +330,11 @@ function fitTable(){
        + 'as well on episodes it never saw as on ones it trained on. It is not overfitting — gains have to come '
        + 'from fitting the data better (more capacity or more training), not from regularization. ';
   if (RE && RE.rollouts[K])
-    v += `Against the previous cube model at the same 5 ms step on the same eval episodes: `
-       + `<b>${EV.rollouts[K].ade_mm.toFixed(1)}</b> vs ${RE.rollouts[K].ade_mm.toFixed(1)} mm `
-       + `(${(EV.rollouts[K].ade_mm/RE.rollouts[K].ade_mm).toFixed(2)}×). `;
+    v += `Over the same 1.2 s horizon at the same 5 ms step, water ends at `
+       + `<b>${EV.rollouts[K].ade_mm.toFixed(1)}</b> mm against the cube model's `
+       + `${RE.rollouts[K].ade_mm.toFixed(1)} mm on its own clips — but that cube arena is 1.0 m wide `
+       + `against water's 0.35 m, and an elastic shell stays chaotic where a liquid settles, so read `
+       + `it as how hard the two tasks are, not as which model is better. `;
   v += `Trained for one epoch (each 5 ms window drawn about once on average), so "training episodes" measures `
      + `fit, not memorization. ${EV.n_stats} episodes per split, checkpoint ${EV.ckpt} at step `
      + `${EV.step.toLocaleString()}.`;
