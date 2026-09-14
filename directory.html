@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<title>Directory — every page on this site</title>
+<link rel="stylesheet" href="site.css?v=20260902">
+<style>
+  .wrap{max-width:1180px; padding:34px 22px 80px}
+  h1{margin-bottom:4px}
+  .sub{max-width:74ch}
+  h2{margin-top:44px}
+  h2 span{font-family:var(--sans); font-size:12px; font-weight:400; color:var(--soft);
+          letter-spacing:.02em; margin-left:10px}
+  table{width:100%; margin-top:14px}
+  th,td{vertical-align:top}
+  td.k,th:first-child{text-align:left}
+  td.k{font-weight:600; white-space:nowrap}
+  td.d{text-align:left; font-size:13px; color:#333; line-height:1.45}
+  td.l{text-align:left; white-space:nowrap; font-size:13px}
+  td.l a{margin-right:12px; display:inline-block}
+  .run{font-family:ui-monospace,Menlo,monospace; font-size:11.5px; color:var(--soft);
+       display:block; font-weight:400; margin-top:2px}
+  .gap{color:#c0392b; font-weight:600}
+  .step{font-variant-numeric:tabular-nums; color:var(--soft); font-size:12.5px}
+  .note{font-size:13.5px; color:#333; line-height:1.55; max-width:74ch; margin:12px 0 0}
+  ul.flat{list-style:none; padding:0; margin:12px 0 0; columns:2; column-gap:34px}
+  ul.flat li{font-size:13.5px; line-height:1.75; break-inside:avoid}
+  ul.flat li span{color:var(--soft); font-size:12.5px}
+  @media(max-width:760px){ ul.flat{columns:1} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Directory</h1>
+<p class="sub">Every page on this site, grouped by what it is about. Each trained model has a
+losses page (the optimisation history) and a performance page (rollouts scored on training
+<i>and</i> eval episodes); some also have a live 3-D viewer.</p>
+
+<h2>Models <span>seven trainings, six pages &mdash; the cube&rsquo;s two halves share one pair</span></h2>
+<table>
+<tr><th>model</th><th>what it is</th><th>steps</th><th>pages</th></tr>
+
+<tr><td class="k">Sand &middot; wide &Delta;t<span class="run">frs1024_c2n2_dt150</span></td>
+  <td class="d">1,024 sand points, 2 context frames, 2 predicted. Trained across
+    2.5&ndash;150 ms; 30 and 80 ms held out. The original &Delta;t-conditioned model, RoPE on time.</td>
+  <td class="step">200k</td>
+  <td class="l"><a href="losses.html">losses</a><a href="performance.html">performance</a><a href="frslive.html">3-D viewer</a></td></tr>
+
+<tr><td class="k">Sand &middot; narrow &Delta;t<span class="run">c2n6_dt50_adaln_bi</span></td>
+  <td class="d">Same sand, 6 predicted frames, 2.5&ndash;50 ms only; 15 and 30 ms held out.
+    adaLN conditioning instead of RoPE, bidirectional temporal attention.</td>
+  <td class="step">300k</td>
+  <td class="l"><a href="losses_c2n6.html">losses</a><a href="performance_c2n6.html">performance</a><a href="c2n6live.html">3-D viewer</a><a href="compare_sand.html">vs. wide &Delta;t</a></td></tr>
+
+<tr><td class="k">Cube &middot; wide &Delta;t<span class="run">c2f6_cube &rarr; c2f6_cube_x2</span></td>
+  <td class="d">512 points on a hollow elastic cube, 2.5&ndash;150 ms, 30 and 80 ms held out.
+    One training history: the first run reached 200k, then branched from its 180k snapshot
+    and carried on to 400k. Both endings are on the same two pages.</td>
+  <td class="step">200k<br>400k</td>
+  <td class="l"><a href="losses_cube.html">losses</a><a href="performance_cube.html">performance</a><a href="cubelive.html">3-D viewer</a><a href="cubelive_x2.html">3-D viewer, 400k</a></td></tr>
+
+<tr><td class="k">Cube &middot; 5 ms<span class="run">c2f6_cube_dt5_adaln_bi</span></td>
+  <td class="d">The same cube at a single step size, 16 predicted frames &mdash; the fixed-&Delta;t
+    reference our 39 M model trains on. adaLN, bidirectional attention.</td>
+  <td class="step">140k</td>
+  <td class="l"><a href="losses_cube_dt5.html">losses</a><a href="performance_cube_dt5.html">performance</a></td></tr>
+
+<tr><td class="k">Cube &middot; 331 M<span class="run">cube_dt5_adaln_bi</span></td>
+  <td class="d">The same 5 ms cube task on the larger 331 M architecture, for the
+    capacity comparison against the 39 M model above.</td>
+  <td class="step">140k</td>
+  <td class="l"><a href="losses_robert_cube.html">losses</a><a href="cubedt5.html">3-D viewer</a>
+    <span class="gap">performance not scored yet</span></td></tr>
+
+<tr><td class="k">Water<span class="run">c2n6_water_dt5_adaln_bi</span></td>
+  <td class="d">1,024 points of MPM liquid in a 0.35 m arena, single 5 ms step, all 480
+    frames of every episode. Losses and rollouts share one page.</td>
+  <td class="step">300k</td>
+  <td class="l"><a href="water.html">losses + performance</a></td></tr>
+</table>
+<p class="note">The one gap is the 331 M cube: it has curves and clips but no train-vs-eval
+rollout scoring, so it has not yet been put next to the 39 M model on equal terms.</p>
+
+<h2>Measurements and studies <span>the questions that shaped the models</span></h2>
+<table>
+<tr><th>page</th><th>what it answers</th></tr>
+<tr><td class="k"><a href="oodt.html">Out-of-range &Delta;t</a></td>
+  <td class="d">Query a model at step sizes inside and beyond the range it trained on.
+    Interpolation is free; extrapolation costs 12&ndash;50%. This is the measurement that
+    motivated training over a wide &Delta;t ladder at all.</td></tr>
+<tr><td class="k"><a href="compare_sand.html">Narrowed &Delta;t vs. the original</a></td>
+  <td class="d">The two sand models on the same eval set, both splits, over the step
+    sizes both trained on.</td></tr>
+<tr><td class="k"><a href="bigstep.html">One big step vs. AR rollout</a></td>
+  <td class="d">Reaching a physical instant in one large step, or by chaining 2.5 ms
+    chunks &mdash; same sampler, same context.</td></tr>
+<tr><td class="k"><a href="dtsampler.html">Samplers on the training set</a></td>
+  <td class="d">One denoising step against twenty-five, and the pyramid schedule,
+    on data the model has seen.</td></tr>
+<tr><td class="k"><a href="dtplan.html">&Delta;t design: collision timing</a></td>
+  <td class="d">How long contacts last, and what that implies for the largest usable
+    step size.</td></tr>
+<tr><td class="k"><a href="collide.html">Collision moments</a></td>
+  <td class="d">Ground-truth episodes with contact highlighted, and how much material is
+    touching a wall over time.</td></tr>
+<tr><td class="k"><a href="fps.html">FPS subsampling pilot</a></td>
+  <td class="d">Whether a fixed farthest-point subset of the 2,048 material points is
+    faithful enough to train on. It is; every current model uses one.</td></tr>
+<tr><td class="k"><a href="water3d.html">Water-3D on this stack</a></td>
+  <td class="d">DeepMind&rsquo;s liquid benchmark, first contact.</td></tr>
+<tr><td class="k"><a href="dt.html">&Delta;t study</a> &middot; <a href="rollout.html">Horizon rollout</a></td>
+  <td class="d">The earliest two viewers, on validation windows from the wall-bounce set.</td></tr>
+</table>
+
+<h2>Datasets <span>what the models were trained on</span></h2>
+<table>
+<tr><th>page</th><th>what it shows</th></tr>
+<tr><td class="k"><a href="episodes.html">New episodes</a></td>
+  <td class="d">A sand sphere and a hollow elastic cube from the current generator, same
+    seed, all 480 frames at 2.5 ms, untrimmed.</td></tr>
+<tr><td class="k"><a href="sandtrain.html">Sand</a> &middot; <a href="cubetrain.html">Elastic cube</a>
+  &middot; <a href="watertrain.html">Water</a> &middot; <a href="shelltrain.html">Elastic shell</a></td>
+  <td class="d">Training clips for each material.</td></tr>
+<tr><td class="k"><a href="sand20.html">Sand samples</a> &middot;
+  <a href="shellsamples.html">One training sample</a> &middot; <a href="videos.html">Training data</a></td>
+  <td class="d">Individual episodes and what a single training window actually contains.</td></tr>
+</table>
+
+<h2>Archive <span>earlier phases, kept for the record</span></h2>
+<ul class="flat">
+  <li><a href="mpm.html">MPM models</a> <span>first MPM runs</span></li>
+  <li><a href="mpm5.html">MPM models &mdash; 5 runs</a> <span>the sweep</span></li>
+  <li><a href="mpm5roll.html">MPM full-episode rollouts</a></li>
+  <li><a href="performance_shell.html">Shell performance</a> <span>c5f16</span></li>
+  <li><a href="performance_shell_full.html">Shell, full episodes</a></li>
+  <li><a href="shellhard.html">Shell hard cases</a></li>
+  <li><a href="pilot.html">Cube pilot</a></li>
+  <li><a href="ro20.html">Random-outcome pilot</a></li>
+  <li><a href="ro20_cube.html">Random-outcome cube</a></li>
+  <li><a href="ro20_sand.html">Random-outcome sand</a></li>
+  <li><a href="index.html">MOVi-spheres wall bounce</a> <span>the original viewer</span></li>
+</ul>
+<p class="note">Five old URLs still work and forward to where their content now lives:
+<code>fit.html</code> and <code>fit_cube.html</code> to the performance pages,
+<code>losses_cube_x2.html</code> to the merged cube losses, and
+<code>losses_water.html</code> / <code>performance_water.html</code> to the water page.</p>
+
+</div>
+</body>
+</html>
