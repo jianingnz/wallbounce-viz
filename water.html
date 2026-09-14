@@ -198,7 +198,11 @@ const HORIZON = 1200, N_TILE = 4;         // the whole clip: 480 frames at 2.5 m
 const ARENA = 0.35, WALL_H = 0.6;         // water box is 0.35 x 0.35 m; walls are really 1.2 m
                                           // tall but the water rarely passes 0.6, so draw that
 const EVB = 'waterperf', TRB = 'waterperf_train';
-let SPEED = 8, TR = null, EV = null, RT = null, RE = null, K = null, tiles = [], frame = -1;
+let SPEED = 8, TR = null, EV = null, K = null, tiles = [], frame = -1;
+// No cross-model reference here on purpose: the nearest 5 ms exports are the cube
+// (data/cubeperf_ref5ms, 512 points in a 1.0 m arena) and sand (data/c2n6perf,
+// 1.0 m arena). Water is 1,024 points in 0.35 m, so a mm-for-mm row next to either
+// would read as a quality gap when it is mostly a difference in arena and material.
 const disc = vizDisc(), clock = makeClock(() => SPEED, 600);
 
 // ---- one shared WebGL canvas, one scissor viewport per tile
@@ -310,12 +314,6 @@ function fitTable(){
   let h = '<tr><th>error (mm)</th><th>training episodes</th><th>eval episodes</th><th>eval ÷ training</th></tr>';
   for (const [lab, a, b, fm] of rows)
     h += `<tr><td class="k">${lab}</td><td>${fm(a)}</td><td>${fm(b)}</td><td><b>${(b/a).toFixed(2)}×</b></td></tr>`;
-  if (RT && RE && RT.rollouts[K] && RE.rollouts[K])
-    h += `<tr><td class="k ref">for scale: the cube model (c2f6_cube) stepped at 5 ms over its own `
-       + `1.2 s clips — a different material in a 1.0 m arena, so a difficulty reference, not a `
-       + `like-for-like comparison</td><td class="ref">${f1(RT.rollouts[K].ade_mm)}</td>`
-       + `<td class="ref">${f1(RE.rollouts[K].ade_mm)}</td>`
-       + `<td class="ref">${(RE.rollouts[K].ade_mm/RT.rollouts[K].ade_mm).toFixed(2)}×</td></tr>`;
   document.getElementById('t_fit').innerHTML = h;
 
   const rW = EV.windows[K].ade_mm/TR.windows[K].ade_mm, rR = EV.rollouts[K].ade_mm/TR.rollouts[K].ade_mm;
@@ -331,12 +329,6 @@ function fitTable(){
     v += 'That is within sampling noise, so there is <b>no measurable generalization gap</b>: the model does '
        + 'as well on episodes it never saw as on ones it trained on. It is not overfitting — gains have to come '
        + 'from fitting the data better (more capacity or more training), not from regularization. ';
-  if (RE && RE.rollouts[K])
-    v += `Over the same 1.2 s horizon at the same 5 ms step, water ends at `
-       + `<b>${EV.rollouts[K].ade_mm.toFixed(1)}</b> mm against the cube model's `
-       + `${RE.rollouts[K].ade_mm.toFixed(1)} mm on its own clips — but that cube arena is 1.0 m wide `
-       + `against water's 0.35 m, and an elastic shell stays chaotic where a liquid settles, so read `
-       + `it as how hard the two tasks are, not as which model is better. `;
   v += `Trained for one epoch (each 5 ms window drawn about once on average), so "training episodes" measures `
      + `fit, not memorization. ${EV.n_stats} episodes per split, checkpoint ${EV.ckpt} at step `
      + `${EV.step.toLocaleString()}.`;
@@ -352,8 +344,6 @@ function pfChart(){
                                             .filter(p => p[0] <= HORIZON);
   const series = [{name:'training episodes', color:css('--s3'), pts:pts(TR), dash:true},
                   {name:'eval episodes', color:css('--s1'), pts:pts(EV)}];
-  if (RE && RE.rollouts[K])
-    series.push({name:'previous cube model, eval', color:'#aaa', pts:pts(RE), w:1.3, dash:true});
   const hi = Math.max(...series.flatMap(s => s.pts.map(p => p[1]))) * 1.08;
   const X = t => L+(W-L-R)*t/HORIZON, Y = v => Tp+(H-Tp-B)*(1-v/hi);
   let g = '';
@@ -428,7 +418,7 @@ Promise.all([
   fetch(`data/${TRB}/summary.json`+V).then(r=>r.json()),
   fetch(`data/${EVB}/summary.json`+V).then(r=>r.json()),
 ]).then(async ([tr, ev]) => {
-  TR = tr; EV = ev; RT = null; RE = null;
+  TR = tr; EV = ev;
   K = Object.keys(EV.rollouts)[0];                    // the one trained step size (5 ms)
   const sp = document.getElementById('sp');
   for (const [lab,v] of [['1/4 speed',4],['1/8 speed',8],['1/16 speed',16]]) sp.add(new Option(lab, v));
