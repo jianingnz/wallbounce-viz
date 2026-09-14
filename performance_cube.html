@@ -100,6 +100,7 @@
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const epid = s => s.split('_').slice(0, 2).join('_');   // ep_00109, not just "ep"
 const V = '?t=' + Date.now();
 // the two endings of the same training run: 200k, and the 180k branch continued to 400k
 const RUNS = {
@@ -420,15 +421,28 @@ function fitChart(id, legId, group, ylab){
   }
   for (const s2 of series) s2.pts = ks.map(k => [s2.D[group][k].dt_ms, s2.D[group][k].ade_mm]);
   const vals = series.flatMap(s2 => s2.pts.map(p=>p[1])), xs = series[0].pts.map(p=>p[0]);
-  const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
-  const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+  // a full decade flattens data that only spans a factor of two, so snap to decades
+  // only when the series actually crosses one; otherwise pad linearly around the range
+  const vmin = Math.min(...vals), vmax = Math.max(...vals), wide = vmax / vmin > 8;
+  const lo = wide ? Math.pow(10, Math.floor(Math.log10(vmin))) : Math.max(0, vmin - (vmax - vmin) * 0.35);
+  const hi = wide ? Math.pow(10, Math.ceil(Math.log10(vmax)))  : vmax + (vmax - vmin) * 0.25;
   const x0 = Math.min(...xs), x1 = Math.max(...xs);
   const X = d => L+(W-L-R)*(Math.log10(d)-Math.log10(x0))/(Math.log10(x1)-Math.log10(x0) || 1);
-  const Y = v => Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+  const Y = wide
+    ? v => Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)))
+    : v => Tp+(H-Tp-B)*(1-(Math.min(Math.max(v,lo),hi)-lo)/(hi-lo || 1));
   let g = '';
-  for (let d=lo; d<=hi*1.0001; d*=10)
+  const ticks = [];
+  if (wide){ for (let d=lo; d<=hi*1.0001; d*=10) ticks.push(d); }
+  else {
+    const raw = (hi-lo)/4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const st = [1,2,2.5,5,10].map(m=>m*mag).find(x=>x>=raw) || mag*10;
+    for (let d=Math.ceil(lo/st)*st; d<=hi*1.0001; d+=st) ticks.push(+d.toPrecision(12));
+  }
+  const dec = ticks.length && Math.max(...ticks) < 10 ? 2 : Math.max(...ticks) < 100 ? 1 : 0;
+  for (const d of ticks)
     g += `<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/>`
-       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d.toFixed(dec)}</text>`;
   for (const d of xs)
     g += `<text x="${X(d)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${d}</text>`;
   g += `<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" text-anchor="middle"
@@ -455,7 +469,7 @@ async function fitGallery(){
     if (!Dx) continue;
     for (const clip of Object.keys(Dx.grid).slice(0, 2)){
       const r = Dx.grid[clip][k]; if (!r) continue;
-      await tile(host, r.dir, `<b>${lab}</b> · ${R.lab} · ${clip.split('_')[0]} · ${r.dt_ms} ms · ${r.ade_mm} mm`,
+      await tile(host, r.dir, `<b>${lab}</b> · ${R.lab} · ${epid(clip)} · ${r.dt_ms} ms · ${r.ade_mm} mm`,
         [{bin:'gt', color:GT_COL, size:0.014}, {bin:'pred', color:col, size:0.015}], false, base);
     }
   }
@@ -473,7 +487,7 @@ async function useCheckpoint(c){
 
   const epSel = document.getElementById('ep'), ep2Sel = document.getElementById('ep2');
   const name = cl => { const e = S.episodes.find(x=>x.clip===cl);
-    return cl.split('_')[0] + ' · ' + e.scenario + (e.pinned ? ' · corner splash' : ''); };
+    return epid(cl) + ' · ' + e.scenario + (e.pinned ? ' · corner splash' : ''); };
   epSel.innerHTML = ''; ep2Sel.innerHTML = '';
   for (const e of S.episodes) epSel.add(new Option(name(e.clip), e.clip));
   for (const cl of S.sub_keys) ep2Sel.add(new Option(name(cl), cl));

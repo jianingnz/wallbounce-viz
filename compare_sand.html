@@ -69,6 +69,7 @@
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const epid = s => s.split('_').slice(0, 2).join('_');   // ep_00109, not just "ep"
 const V = '?t=' + Date.now();
 const GT_COL = '#b9b4ab', HO_COL = '#c0392b', HORIZON = 400;
 const OE = 'frsperf', OT = 'frsperf_train', NE = 'c2n6perf', NT = 'c2n6perf_train';
@@ -291,7 +292,7 @@ Promise.all([
   addEventListener('resize', () => { chart('c_ade','l_ade','ade_mm','mean rollout error (mm)');
                                      chart('c_fde','l_fde','fde_mm','final-frame error (mm)'); });
   const epSel = document.getElementById('ep'), dtSel = document.getElementById('dt');
-  for (const e of N.episodes) epSel.add(new Option(e.clip.split('_')[0] + ' · ' + e.scenario
+  for (const e of N.episodes) epSel.add(new Option(epid(e.clip) + ' · ' + e.scenario
         + (e.pinned ? ' · corner splash' : ''), e.clip));
   EP = N.episodes[0].clip;
   const both = Object.keys(N.grid[EP] || {}).map(Number).filter(k => (O.grid[EP]||{})[k]).sort((a,b)=>a-b);

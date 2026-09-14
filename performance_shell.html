@@ -53,6 +53,7 @@
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const epid = s => s.split('_').slice(0, 2).join('_');   // ep_00109, not just "ep"
 const V = '?t=' + Date.now();
 const GT_COL = '#b9b4ab', PYR = '#d4762c', HO = '#c0392b';
 let SPAN = 1200;
@@ -172,7 +173,7 @@ function table(){
       return `<th class="${r&&r.held_out?'ho':''}">${r?r.dt_ms:k*2.5} ms${r&&r.held_out?' †':''}</th>`;
     }).join('') + '</tr>';
   for (const c of cubes)
-    h += `<tr><td class="k">${c.split('_')[0]} · ${c.split('_').pop()}</td>`
+    h += `<tr><td class="k">${epid(c)} · ${c.split('_').pop()}</td>`
        + ks.map(k => { const r = cell(c, k); return `<td class="${r&&r.held_out?'ho':''}">${r?r.ade_mm:'–'}</td>`; }).join('')
        + '</tr>';
   h += '<tr><td class="k"><b>mean</b></td>' + ks.map(k => {
@@ -195,7 +196,7 @@ function table(){
   const epSel = document.getElementById('ep');
   const CUBES = S.episodes.filter(e => e.object === 'cube');
   for (const e of CUBES)
-    epSel.add(new Option(`${e.clip.split('_')[0]} · ${e.scenario}`, e.clip));
+    epSel.add(new Option(`${epid(e.clip)} · ${e.scenario}`, e.clip));
   EP = CUBES[0].clip;
   const sp = document.getElementById('sp');
   for (const [l,v] of [['1/4 speed',4],['1/8 speed',8],['1/16 speed',16]]) sp.add(new Option(l, v));

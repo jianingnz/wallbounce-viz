@@ -94,6 +94,7 @@
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const epid = s => s.split('_').slice(0, 2).join('_');   // ep_00109, not just "ep"
 const fmt = (v, n) => v.toLocaleString(undefined, {maximumFractionDigits: n, minimumFractionDigits: n});
 
 // ---- training curves (losses_water.json) ----
@@ -380,7 +381,7 @@ async function fitGallery(){
     for (const clip of Object.keys(D.grid).slice(0, N_TILE)){
       const r = D.grid[clip][K]; if (!r) continue;
       await tile(host, base, r.dir,
-        `<span class="${cls}">${lab}</span> · ${clip.split('_')[0]} · <b>${r.ade_mm} mm</b>`,
+        `<span class="${cls}">${lab}</span> · ${epid(clip)} · <b>${r.ade_mm} mm</b>`,
         [{bin:'gt', color:GT_COL, size:0.014}, {bin:'pred', color:col, size:0.015}], cls==='tr'?'tr':'');
     }
 }
@@ -431,7 +432,7 @@ Promise.all([
   for (const [lab,v] of [['1/4 speed',4],['1/8 speed',8],['1/16 speed',16]]) sp.add(new Option(lab, v));
   sp.value = String(SPEED); sp.onchange = () => SPEED = +sp.value;
   const ep2 = document.getElementById('ep2');
-  const name = c => { const e = EV.episodes.find(x=>x.clip===c); return c.split('_')[0] + (e ? ' · ' + e.scenario : ''); };
+  const name = c => { const e = EV.episodes.find(x=>x.clip===c); return epid(c) + (e ? ' · ' + e.scenario : ''); };
   for (const c of EV.sub_keys) ep2.add(new Option(name(c), c));
   EP2 = EV.sub_keys[0]; ep2.onchange = async () => { EP2 = ep2.value; await sectionSAMP(); };
 

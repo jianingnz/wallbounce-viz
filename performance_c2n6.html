@@ -94,6 +94,7 @@
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const epid = s => s.split('_').slice(0, 2).join('_');   // ep_00109, not just "ep"
 const V = '?t=' + Date.now();
 const EVB = 'c2n6perf', TRB = 'c2n6perf_train';   // eval and training-split exports
 const GT_COL = '#b9b4ab', PR_COL = '#d4762c', HO_COL = '#c0392b', ALT = ['#1f5f8b','#3d8b5a','#7a5aa6'];
@@ -383,15 +384,28 @@ function fitChart(id, legId, group, ylab){
                   {name:'eval episodes', color:css('--s1'), D:S}]
     .map(s => ({...s, pts: ks.map(k => [s.D[group][k].dt_ms, s.D[group][k].ade_mm])}));
   const vals = series.flatMap(s => s.pts.map(p=>p[1])), xs = series[0].pts.map(p=>p[0]);
-  const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...vals))));
-  const hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...vals))));
+  // a full decade flattens data that only spans a factor of two, so snap to decades
+  // only when the series actually crosses one; otherwise pad linearly around the range
+  const vmin = Math.min(...vals), vmax = Math.max(...vals), wide = vmax / vmin > 8;
+  const lo = wide ? Math.pow(10, Math.floor(Math.log10(vmin))) : Math.max(0, vmin - (vmax - vmin) * 0.35);
+  const hi = wide ? Math.pow(10, Math.ceil(Math.log10(vmax)))  : vmax + (vmax - vmin) * 0.25;
   const x0 = Math.min(...xs), x1 = Math.max(...xs);
   const X = d => L+(W-L-R)*(Math.log10(d)-Math.log10(x0))/(Math.log10(x1)-Math.log10(x0) || 1);
-  const Y = v => Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)));
+  const Y = wide
+    ? v => Tp+(H-Tp-B)*(1-(Math.log10(Math.max(v,lo))-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo)))
+    : v => Tp+(H-Tp-B)*(1-(Math.min(Math.max(v,lo),hi)-lo)/(hi-lo || 1));
   let g = '';
-  for (let d=lo; d<=hi*1.0001; d*=10)
+  const ticks = [];
+  if (wide){ for (let d=lo; d<=hi*1.0001; d*=10) ticks.push(d); }
+  else {
+    const raw = (hi-lo)/4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const st = [1,2,2.5,5,10].map(m=>m*mag).find(x=>x>=raw) || mag*10;
+    for (let d=Math.ceil(lo/st)*st; d<=hi*1.0001; d+=st) ticks.push(+d.toPrecision(12));
+  }
+  const dec = ticks.length && Math.max(...ticks) < 10 ? 2 : Math.max(...ticks) < 100 ? 1 : 0;
+  for (const d of ticks)
     g += `<line x1="${L}" y1="${Y(d)}" x2="${W-R}" y2="${Y(d)}" stroke="${css('--line')}"/>`
-       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d<1?d:d.toFixed(0)}</text>`;
+       + `<text x="${L-7}" y="${Y(d)+4}" text-anchor="end" font-size="11" fill="#666">${d.toFixed(dec)}</text>`;
   for (const d of xs)
     g += `<text x="${X(d)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#666">${d}</text>`;
   g += `<text x="14" y="${Tp+(H-Tp-B)/2}" font-size="11" fill="#666" text-anchor="middle"
@@ -417,7 +431,7 @@ async function fitGallery(){
                                      [EVB, S,  css('--s1'), 'eval episode']])
     for (const clip of Object.keys(D.grid).slice(0, 2)){
       const r = D.grid[clip][k]; if (!r) continue;
-      await tile(host, r.dir, `<b>${lab}</b> · ${clip.split('_')[0]} · ${r.dt_ms} ms · ${r.ade_mm} mm`,
+      await tile(host, r.dir, `<b>${lab}</b> · ${epid(clip)} · ${r.dt_ms} ms · ${r.ade_mm} mm`,
         [{bin:'gt', color:GT_COL, size:0.014}, {bin:'pred', color:col, size:0.015}], false, base);
     }
 }
@@ -429,7 +443,7 @@ let EP = null, EP2 = null;
   TR = await (await fetch(`data/${TRB}/summary.json`+V)).json().catch(()=>null);
   const epSel = document.getElementById('ep'), ep2Sel = document.getElementById('ep2');
   const name = c => { const e = S.episodes.find(x=>x.clip===c);
-    return c.split('_')[0] + ' · ' + e.scenario + (e.pinned ? ' · corner splash' : ''); };
+    return epid(c) + ' · ' + e.scenario + (e.pinned ? ' · corner splash' : ''); };
   for (const e of S.episodes) epSel.add(new Option(name(e.clip), e.clip));
   for (const c of S.sub_keys) ep2Sel.add(new Option(name(c), c));
   EP = S.episodes[0].clip; EP2 = S.sub_keys[0];
