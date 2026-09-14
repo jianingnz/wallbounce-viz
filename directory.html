@@ -69,11 +69,11 @@ losses page (the optimisation history) and a performance page (rollouts scored o
   <td class="l"><a href="losses_cube_dt5.html">losses</a><a href="performance_cube_dt5.html">performance</a></td></tr>
 
 <tr><td class="k">Cube &middot; 331 M<span class="run">cube_dt5_adaln_bi</span></td>
-  <td class="d">The same 5 ms cube task on the larger 331 M architecture, for the
-    capacity comparison against the 39 M model above.</td>
+  <td class="d">The same 5 ms cube task on the larger 331 M architecture &mdash; 8.5&times; the
+    parameters of the 39 M above, scored on the identical episodes and horizon so the two
+    can be put side by side.</td>
   <td class="step">140k</td>
-  <td class="l"><a href="losses_robert_cube.html">losses</a><a href="cubedt5.html">3-D viewer</a>
-    <span class="gap">performance not scored yet</span></td></tr>
+  <td class="l"><a href="losses_robert_cube.html">losses</a><a href="performance_cube_331m.html">performance</a><a href="cubedt5.html">3-D viewer</a><a href="compare_cube.html">vs. the 39 M</a></td></tr>
 
 <tr><td class="k">Water<span class="run">c2n6_water_dt5_adaln_bi</span></td>
   <td class="d">1,024 points of MPM liquid in a 0.35 m arena, single 5 ms step, all 480
@@ -81,8 +81,10 @@ losses page (the optimisation history) and a performance page (rollouts scored o
   <td class="step">300k</td>
   <td class="l"><a href="water.html">losses + performance</a></td></tr>
 </table>
-<p class="note">The one gap is the 331 M cube: it has curves and clips but no train-vs-eval
-rollout scoring, so it has not yet been put next to the 39 M model on equal terms.</p>
+<p class="note">The two cube models at 5 ms &mdash; ours at 39 M and the 331 M &mdash; are scored by
+the same protocol on the same episodes, so <a href="compare_cube.html">compare_cube.html</a> answers
+whether the extra capacity buys anything. Every model above reports both splits with a 25-step
+sampler where one has been run.</p>
 
 <h2>Measurements and studies <span>the questions that shaped the models</span></h2>
 <table>
@@ -91,6 +93,9 @@ rollout scoring, so it has not yet been put next to the 39 M model on equal term
   <td class="d">Query a model at step sizes inside and beyond the range it trained on.
     Interpolation is free; extrapolation costs 12&ndash;50%. This is the measurement that
     motivated training over a wide &Delta;t ladder at all.</td></tr>
+<tr><td class="k"><a href="compare_cube.html">Cube: 331 M vs. 39 M</a></td>
+  <td class="d">The same cube task at 5 ms on two models 8.5&times; apart in size, identical
+    episodes and protocol &mdash; does capacity help here?</td></tr>
 <tr><td class="k"><a href="compare_sand.html">Narrowed &Delta;t vs. the original</a></td>
   <td class="d">The two sand models on the same eval set, both splits, over the step
     sizes both trained on.</td></tr>
