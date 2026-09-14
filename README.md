@@ -1,5 +1,7 @@
 # wallbounce-viz
 
+**[Directory](https://jianingnz.github.io/wallbounce-viz/directory.html)** — every page on the site: one losses page and one performance page per trained model, plus the studies, datasets and archive.
+
 Interactive 3D viewer for MOVi-spheres wall-bounce one-step predictions —
 ground truth vs. model, side by side with a shared camera. A rigid sphere is
 launched at a wall inside a box (4 side walls + floor, open top); the model
