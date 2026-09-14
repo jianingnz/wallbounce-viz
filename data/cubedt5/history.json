@@ -151,12 +151,12 @@
  },
  {
   "step": 140000,
-  "updated": "2026-09-14 01:44 UTC",
-  "train_ade": 255.15,
-  "train_fde": 371.88,
-  "train_ade_one_shot": 283.56,
-  "eval_ade": 231.14,
-  "eval_fde": 355.78,
-  "eval_ade_one_shot": 212.97
+  "updated": "2026-09-14 02:58 UTC",
+  "train_25step": 264.1,
+  "train_pyramid": 234.63,
+  "train_oneshot": 269.89,
+  "eval_25step": 240.65,
+  "eval_pyramid": 281.24,
+  "eval_oneshot": 210.37
  }
 ]

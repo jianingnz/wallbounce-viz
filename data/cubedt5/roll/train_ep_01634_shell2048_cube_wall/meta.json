@@ -1,0 +1,1 @@
+{"clip": "ep_01634_shell2048_cube_wall", "split": "train", "n_frames": 224, "n_particles": 512, "q_lo": -0.1167859360575676, "q_scale": 1.19368164986372, "dt_ms": 5.0, "step": 140000, "variants": [{"name": "25-step", "ade_mm": 274.21}, {"name": "pyramid", "ade_mm": 240.58}, {"name": "one-shot", "ade_mm": 294.54}]}

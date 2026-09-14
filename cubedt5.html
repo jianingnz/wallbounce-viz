@@ -18,6 +18,10 @@
   table{margin-top:12px}
   td.k,th:first-child{text-align:left}
   td.tr{color:#0072B2; font-weight:600} td.ev{color:#D55E00; font-weight:600}
+  .sw{display:inline-block; width:14px; height:3px; vertical-align:middle; margin-right:7px}
+  .ctl button{font:inherit; font-size:12.5px; padding:4px 9px; border:1px solid var(--line);
+              background:#fff; color:var(--ink); cursor:pointer; border-radius:3px}
+  .ctl button.active{background:var(--ink); border-color:var(--ink); color:#fff}
   .note{font-size:14px; color:#333; margin:14px 0 0; line-height:1.55; max-width:84ch}
   .small{font-size:12.5px; color:var(--soft); margin:8px 0 0; max-width:84ch}
   #stage{height:430px; position:relative; border:1px solid var(--line); margin-top:10px}
@@ -52,8 +56,13 @@
   <table id="t_fit"></table>
   <p class="note" id="verdict"></p>
 
-  <p class="ttl">Error along the rollout <span>mean over the episodes of each split, the whole clip</span></p>
-  <svg id="c_pf" style="height:280px"></svg><div class="leg" id="l_pf"></div>
+  <p class="ttl">Error along the rollout <span>all three samplers, each split, mean over its episodes</span></p>
+  <div class="charts">
+    <div><p class="cap">Training episodes</p><svg id="c_pf_tr" style="height:260px"></svg>
+      <div class="leg" id="l_pf_tr"></div></div>
+    <div><p class="cap">Held-out eval episodes</p><svg id="c_pf_ev" style="height:260px"></svg>
+      <div class="leg" id="l_pf_ev"></div></div>
+  </div>
   <p class="small">Two ground-truth frames in, then the model is re-anchored on its own predictions to the end
     of the clip &mdash; never re-grounded on truth.</p>
 
@@ -62,6 +71,7 @@
 
   <p class="ttl">One rollout, watched <span>ground truth left, prediction right &mdash; drag to rotate</span></p>
   <div class="ctl" id="ex_pick"></div>
+  <div class="ctl" id="ex_src"></div>
   <div id="stage"><canvas id="c"></canvas>
     <div class="lbl l">ground truth</div><div class="lbl r">prediction</div></div>
   <p class="small" id="excap"></p>
@@ -75,7 +85,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
 <script>
-const COL={train:'#0072B2',eval:'#D55E00'};   // validated: protan dE 21.9, deutan 28.2
+const COL={train:'#0072B2',eval:'#D55E00'};          // splits
+const SC={'25-step':'#0072B2','pyramid':'#D55E00','one-shot':'#009E73'};  // samplers, CVD-validated
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#666';
 let S=null,H=[],curves=null;
 
@@ -138,42 +149,62 @@ function render(){const w=canvas.clientWidth,h=canvas.clientHeight,half=Math.flo
  renderer.setViewport(0,0,half,h);renderer.setScissor(0,0,half,h);renderer.render(V_gt.scene,camera);
  renderer.setViewport(half,0,w-half,h);renderer.setScissor(half,0,w-half,h);renderer.render(V_pr.scene,camera);}
 function loop(ts){controls.update();if(gt){const f=Math.min(T-1,Math.round(clock.tick(ts,true,(T-1)*dtms)/dtms));if(f!==frame)setFrame(f);}render();requestAnimationFrame(loop);}
-async function loadEx(dir){const v='?t='+Date.now();
+const FILE={'25-step':'25step','pyramid':'pyramid','one-shot':'oneshot'};
+let curDir=null,curSrc='25-step';
+function dq(b){const u=new Uint16Array(b),f=new Float32Array(u.length);
+ for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;}
+async function loadPred(nm){curSrc=nm;
+ const b=await fetch(`data/cubedt5/roll/${curDir}/${FILE[nm]}.bin?t=${Date.now()}`).then(r=>r.arrayBuffer());
+ pr=dq(b);paintSrc();setFrame(Math.min(Math.max(frame,0),T-1));
+ const a=(meta.variants||[]).find(x=>x.name===nm);
+ if(a)document.getElementById('excap').textContent=
+   `${meta.split} · ${meta.clip} · ${meta.n_frames} frames at ${meta.dt_ms} ms from 2 context frames · ${nm} rollout ADE ${a.ade_mm} mm`;}
+function paintSrc(){const box=document.getElementById('ex_src');box.innerHTML='';
+ (meta.variants||[]).forEach(v=>{const b=document.createElement('button');
+   b.textContent=`${v.name} · ${v.ade_mm.toFixed(0)} mm`;
+   b.className=v.name===curSrc?'active':'';
+   b.onclick=()=>loadPred(v.name);box.appendChild(b);});}
+async function loadEx(dir){curDir=dir;const v='?t='+Date.now();
  meta=await (await fetch(`data/cubedt5/roll/${dir}/meta.json${v}`)).json();
- const dq=b=>{const u=new Uint16Array(b),f=new Float32Array(u.length);for(let i=0;i<u.length;i++)f[i]=u[i]/65535*meta.q_scale+meta.q_lo;return f;};
- const [g,p]=await Promise.all([fetch(`data/cubedt5/roll/${dir}/gt.bin${v}`).then(r=>r.arrayBuffer()),
-                                fetch(`data/cubedt5/roll/${dir}/pred.bin${v}`).then(r=>r.arrayBuffer())]);
- gt=dq(g);pr=dq(p);N=meta.n_particles;T=meta.n_frames;dtms=meta.dt_ms;
+ const g=await fetch(`data/cubedt5/roll/${dir}/gt.bin${v}`).then(r=>r.arrayBuffer());
+ gt=dq(g);N=meta.n_particles;T=meta.n_frames;dtms=meta.dt_ms;
  for(const V of [V_gt,V_pr])V.geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));
- ov.alloc(N);frame=-1;clock.set(0);setFrame(0);
+ ov.alloc(N);frame=-1;clock.set(0);
+ if(!(meta.variants||[]).some(x=>x.name===curSrc))curSrc=(meta.variants||[{name:'25-step'}])[0].name;
+ await loadPred(curSrc);
+ const a=(meta.variants||[]).find(x=>x.name===curSrc);
  document.getElementById('excap').textContent=
-   `${meta.split} · ${meta.clip} · ${meta.n_frames} frames at ${meta.dt_ms} ms from 2 context frames · rollout ADE ${meta.ade_mm} mm, final frame ${meta.fde_mm} mm`;}
+   `${meta.split} · ${meta.clip} · ${meta.n_frames} frames at ${meta.dt_ms} ms from 2 context frames`+
+   (a?` · ${curSrc} rollout ADE ${a.ade_mm} mm`:'');}
 
 function draw(){
- const tr=S.splits.train,ev=S.splits.eval,r=ev.ade_mm/tr.ade_mm;
+ const tr=S.splits.train,ev=S.splits.eval,SS=S.samplers||['25-step'];
+ const A=(sp,nm,k)=>sp.by_sampler[nm][k];
  document.getElementById('n_ep').textContent=tr.n;
- const row=(k,a,b,f)=>`<tr><td class="k">${k}</td><td class="tr">${f(a)}</td><td class="ev">${f(b)}</td>`+
-   `<td>${(b/a).toFixed(2)}</td></tr>`;
- document.getElementById('t_fit').innerHTML=
-   '<tr><th>over the whole clip</th><th>train episodes</th><th>eval episodes</th><th>eval / train</th></tr>'+
-   row('rollout ADE (mm)',tr.ade_mm,ev.ade_mm,v=>v.toFixed(1))+
-   row('error at the last frame (mm)',tr.fde_mm,ev.fde_mm,v=>v.toFixed(1))+
-   row('rollout ADE, one denoising step (mm)',tr.ade_one_shot_mm,ev.ade_one_shot_mm,v=>v.toFixed(1));
+ let h='<tr><th>sampler</th><th>train ADE</th><th>eval ADE</th><th>eval / train</th>'+
+       '<th>train final frame</th><th>eval final frame</th></tr>';
+ for(const nm of SS){const a=A(tr,nm,'ade_mm'),b=A(ev,nm,'ade_mm');
+   h+=`<tr><td class="k"><span class="sw" style="background:${SC[nm]}"></span>${nm}</td>`+
+      `<td class="tr">${a.toFixed(1)}</td><td class="ev">${b.toFixed(1)}</td><td>${(b/a).toFixed(2)}</td>`+
+      `<td>${A(tr,nm,'fde_mm').toFixed(0)}</td><td>${A(ev,nm,'fde_mm').toFixed(0)}</td></tr>`;}
+ document.getElementById('t_fit').innerHTML=h;
+ const r=A(ev,'25-step','ade_mm')/A(tr,'25-step','ade_mm');
  document.getElementById('verdict').textContent=
-   `${tr.frames} predicted frames (${(tr.frames*S.dt_ms/1000).toFixed(2)} s) from 2 context frames. `+
-   `Eval / train = ${r.toFixed(2)} — `+
-   (r>1.15?'eval is clearly worse, so the model is fitting its training episodes better than held-out ones.'
-    :r<0.87?'eval is easier than train here, so nothing is being memorised; the sampled eval clips are simply milder.'
-    :'the two sit within noise of each other: nothing is being memorised, and both are limited by the same thing.');
+   `${tr.frames} predicted frames (${(tr.frames*S.dt_ms/1000).toFixed(2)} s) from 2 context frames, millimetres. `+
+   `On 25 steps, eval / train = ${r.toFixed(2)} — `+
+   (r>1.15?'eval is clearly worse, so the model fits its training episodes better than held-out ones.'
+    :r<0.87?'eval is easier than train here, so nothing is being memorised.'
+    :'the two sit within noise of each other: nothing is being memorised.');
  if(curves)logChart('c_tr','l_tr',[{name:'train loss',color:COL.train,pts:curves.train_loss}],140000,'loss (log)','training step');
  if(curves)logChart('c_val','l_val',[{name:'val',color:COL.eval,pts:curves.val_loss},
     {name:'val · EMA',color:'#009E73',pts:curves.val_loss_ema}],140000,'loss (log)','training step');
  const ms=i=>((i+1)*S.dt_ms);
- lineChart('c_pf','l_pf',[{name:'train',color:COL.train,pts:tr.per_frame_mm.map((v,i)=>[ms(i),v])},
-                          {name:'eval',color:COL.eval,pts:ev.per_frame_mm.map((v,i)=>[ms(i),v])}],
-           null,'error (mm)','predicted time',v=>`${(v/1000).toFixed(2)} s`);
- if(H.length)lineChart('c_hist','l_hist',[{name:'train',color:COL.train,pts:H.map(h=>[h.step,h.train_ade])},
-                                          {name:'eval',color:COL.eval,pts:H.map(h=>[h.step,h.eval_ade])}],
+ for(const [id,leg,sp] of [['c_pf_tr','l_pf_tr',tr],['c_pf_ev','l_pf_ev',ev]])
+   lineChart(id,leg,SS.map(nm=>({name:nm,color:SC[nm],pts:sp.by_sampler[nm].per_frame_mm.map((v,i)=>[ms(i),v])})),
+             null,'error (mm)','predicted time',v=>`${(v/1000).toFixed(2)} s`);
+ const hv=(h,sp)=>h[sp+'_25step']!==undefined?h[sp+'_25step']:h[sp+'_ade'];
+ if(H.length)lineChart('c_hist','l_hist',[{name:'train · 25-step',color:COL.train,pts:H.map(h=>[h.step,hv(h,'train')])},
+                                          {name:'eval · 25-step',color:COL.eval,pts:H.map(h=>[h.step,hv(h,'eval')])}],
            null,'rollout ADE (mm)','training step',v=>`${Math.round(v/1000)}k`);
  const pick=document.getElementById('ex_pick');pick.innerHTML='';
  (S.examples||[]).forEach((e,i)=>{const b=document.createElement('button');

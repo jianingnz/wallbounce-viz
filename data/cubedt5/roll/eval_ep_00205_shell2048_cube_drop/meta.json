@@ -1,0 +1,1 @@
+{"clip": "ep_00205_shell2048_cube_drop", "split": "eval", "n_frames": 224, "n_particles": 512, "q_lo": 0.013197414577007294, "q_scale": 0.9684315398335457, "dt_ms": 5.0, "step": 140000, "variants": [{"name": "25-step", "ade_mm": 159.56}, {"name": "pyramid", "ade_mm": 155.89}, {"name": "one-shot", "ade_mm": 75.78}]}

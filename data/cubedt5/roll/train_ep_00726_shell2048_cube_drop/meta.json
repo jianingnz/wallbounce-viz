@@ -1,1 +1,1 @@
-{"clip": "ep_00726_shell2048_cube_drop", "split": "train", "n_frames": 224, "n_particles": 512, "q_lo": 0.010159425437450409, "q_scale": 0.805951900780201, "dt_ms": 5.0, "step": 140000, "ade_mm": 240.97, "fde_mm": 483.19}
+{"clip": "ep_00726_shell2048_cube_drop", "split": "train", "n_frames": 224, "n_particles": 512, "q_lo": 0.008387044072151184, "q_scale": 0.8605847805738449, "dt_ms": 5.0, "step": 140000, "variants": [{"name": "25-step", "ade_mm": 188.22}, {"name": "pyramid", "ade_mm": 185.94}, {"name": "one-shot", "ade_mm": 127.83}]}
