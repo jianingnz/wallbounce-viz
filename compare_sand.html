@@ -37,6 +37,8 @@
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
+  <div id="mh"></div>
+
 
   <p class="ttl">Training episodes vs eval episodes
     <span>both models, both splits — averaged over the step sizes both models trained on (2.5–40 ms)</span></p>
@@ -66,6 +68,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
+<script src="modelhead.js?v=1"></script>
+<script>modelHeadPair('c2n6_dt50_adaln_bi', 'frs1024_c2n2_dt150', 'Model comparison', 'Sand: narrowed Δt against the original');</script>
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();

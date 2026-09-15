@@ -37,6 +37,8 @@
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
+  <div id="mh"></div>
+
 
   <p class="ttl">331 M vs 39 M, on training and eval episodes
     <span>the same episodes, the same 1,190 ms, the same sampler &mdash; only the model differs</span></p>
@@ -70,6 +72,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
+<script src="modelhead.js?v=1"></script>
+<script>modelHeadPair('cube_dt5_adaln_bi', 'c2f6_cube_dt5_adaln_bi', 'Model comparison', 'Cube at 5 ms: 331 M against 39 M');</script>
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();

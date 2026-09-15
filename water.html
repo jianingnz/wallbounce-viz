@@ -42,12 +42,12 @@
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
+  <div id="mh"></div>
 
-  <h1>Water</h1>
-  <p class="sub">MPM liquid (2-litre sphere, 1024 points) in a 0.35&nbsp;m box, one 5&nbsp;ms step,
-     2 ground-truth frames &rarr; 6 predicted. Built as a controlled twin of the sand model
-     <span class="mono">c2n6_dt50_adaln_bi</span> &mdash; same points, window, batch, steps, architecture,
-     adaptive-layer-norm &Delta;t and bidirectional attention &mdash; so the two compare at sand&rsquo;s 5&nbsp;ms rung.</p>
+
+  <p class="sub">A controlled twin of the sand model <span class="mono">c2n6_dt50_adaln_bi</span>:
+     same points, window, batch, steps and architecture, so the two compare at sand&rsquo;s 5&nbsp;ms rung.
+     The arena is the difference that matters &mdash; 0.35&nbsp;m against sand&rsquo;s 1&nbsp;m.</p>
 
   <p class="ttl">Training <span>live from the run; the objective, the same error in physical units, and the schedule</span></p>
   <div class="charts">
@@ -91,6 +91,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
+<script src="modelhead.js?v=1"></script>
+<script>modelHead('c2n6_water_dt5_adaln_bi', 'Training losses and rollout performance');</script>
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();

@@ -37,6 +37,8 @@
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
+  <div id="mh"></div>
+
 
   <p class="ttl">Training episodes vs eval episodes
     <span>same checkpoint and protocol on both splits &mdash; does it fit the data, and does it generalize?</span></p>
@@ -91,6 +93,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
+<script src="modelhead.js?v=1"></script>
+<script>modelHead('c2n6_dt50_adaln_bi', 'Rollout performance');</script>
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();

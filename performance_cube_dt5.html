@@ -37,6 +37,8 @@
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
+  <div id="mh"></div>
+
 
   <p class="ttl">Training episodes vs eval episodes
     <span>same checkpoint, same protocol, <b id="n_ep">–</b> episodes per split, 5 ms steps from 2 ground-truth frames, sampled with <b id="samp">–</b></span></p>
@@ -68,6 +70,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
+<script src="modelhead.js?v=1"></script>
+<script>modelHead('c2f6_cube_dt5_adaln_bi', 'Rollout performance');</script>
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();

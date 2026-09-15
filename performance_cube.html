@@ -38,6 +38,8 @@
 <body>
 <canvas id="bg"></canvas>
 <div class="wrap">
+  <div id="mh"></div>
+
 
   <p class="ttl">Training episodes vs eval episodes, at both checkpoints
     <span>the first run to 200k, and the continuation that branched at 180k and ran to 400k</span></p>
@@ -97,6 +99,8 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="overlay.js?v=2"></script>
+<script src="modelhead.js?v=1"></script>
+<script>modelHead('c2f6_cube', 'Rollout performance');</script>
 <script>
 (function(){
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();

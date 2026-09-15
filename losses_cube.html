@@ -22,7 +22,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1 style="font-family:var(--serif);font-size:28px;margin:4px 0 2px">Cube — one training history</h1>
+  <div id="mh"></div>
+
   <p class="sub" style="font-family:var(--serif);color:#333;font-size:16px;margin:0 0 4px">
      <b>x1</b> trained 0&rarr;200k and decayed over its last 20k. <b>x2</b> branched from x1&rsquo;s
      pre-decay snapshot at <b>180k</b> and carried on to 400k with its own decay over the last 40k.
@@ -41,6 +42,8 @@
     <a href="performance_cube.html">performance_cube.html</a>.</p>
 </div>
 
+<script src="modelhead.js?v=1"></script>
+<script>modelHead('c2f6_cube', 'Training losses');</script>
 <script>
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const fmt = (v, n) => v.toLocaleString(undefined, {maximumFractionDigits: n, minimumFractionDigits: n});

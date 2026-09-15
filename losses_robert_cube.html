@@ -21,6 +21,8 @@
 </head>
 <body>
 <div class="wrap">
+  <div id="mh"></div>
+
   <div class="charts">
     <div><p class="ttl">Training objective <span>MSE on the predicted velocity, normalizer units</span></p>
       <svg id="c_obj" style="height:260px"></svg><div class="leg" id="l_obj"></div></div>
@@ -33,6 +35,8 @@
   <table id="t_fin"></table>
 </div>
 
+<script src="modelhead.js?v=1"></script>
+<script>modelHead('cube_dt5_adaln_bi', 'Training losses');</script>
 <script>
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const fmt = (v, n) => v.toLocaleString(undefined, {maximumFractionDigits: n, minimumFractionDigits: n});
