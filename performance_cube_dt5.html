@@ -39,7 +39,7 @@
 <div class="wrap">
 
   <p class="ttl">Training episodes vs eval episodes
-    <span>same checkpoint, same protocol, <b id="n_ep">–</b> episodes per split, 5 ms steps from 2 ground-truth frames</span></p>
+    <span>same checkpoint, same protocol, <b id="n_ep">–</b> episodes per split, 5 ms steps from 2 ground-truth frames, sampled with <b id="samp">–</b></span></p>
   <table id="t_fit"></table>
   <p class="note" id="verdict"></p>
   <p class="ttl" style="font-size:16px;margin-top:22px">Error along the rollout
@@ -51,16 +51,18 @@
   </div>
   <div class="grid" id="grid_fit"></div>
 
-  <p class="ttl">Error at fixed times <span>autoregressive rollout, chunks of 16 frames, each re-anchored on the model's own last 2 predictions</span></p>
+  <p class="ttl">Error at fixed times <span>autoregressive rollout, chunks of <b id="fl">–</b> frames, each re-anchored on the model's own last 2 predictions</span></p>
   <table id="t_roll"></table>
 
-  <p class="ttl">One denoising step vs twenty-five <span>identical weights, identical code path — eval episodes</span></p>
+  <p class="ttl">Samplers side by side <span>identical weights, identical code path, eval episodes — twenty-five steps is what the numbers above report</span></p>
   <div class="ctl"><label>episode <select id="ep2"></select></label></div>
   <div class="g4" id="grid_s"></div>
   <table id="t_s"></table>
 
   <p class="small">This model trains at a single step size (5 ms), so the step-size sections of the other
-    performance pages — error vs Δt and step sizes the model never trained on — do not apply here.</p>
+    performance pages — error vs Δt and step sizes the model never trained on — do not apply here.
+    Put side by side with the 331 M on <a href="compare_cube.html">compare_cube.html</a>;
+    loss curves are on <a href="losses_cube_dt5.html">losses_cube_dt5.html</a>.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -181,9 +183,14 @@ function fitTable(){
   let h = '<tr><th>error (mm)</th><th>training episodes</th><th>eval episodes</th><th>eval ÷ training</th></tr>';
   for (const [lab, a, b, fm] of rows)
     h += `<tr><td class="k">${lab}</td><td>${fm(a)}</td><td>${fm(b)}</td><td><b>${(b/a).toFixed(2)}×</b></td></tr>`;
+  const OR = (EV.rollouts_oneshot||{})[K], ORT = (TR.rollouts_oneshot||{})[K];
+  if (OR && ORT) h += `<tr><td class="k ref">the same rollout from one denoising pass — the model's `
+    + `mean, not a sample</td><td class="ref">${f1(ORT.ade_mm)}</td><td class="ref">${f1(OR.ade_mm)}</td>`
+    + `<td class="ref">${(OR.ade_mm/ORT.ade_mm).toFixed(2)}×</td></tr>`;
   if (RT && RE && RT.rollouts[K] && RE.rollouts[K])
-    h += `<tr><td class="k ref">for reference: previous cube model (c2f6_cube — mixed step sizes, 6 frames) `
-       + `at the same 5 ms step, same episodes, full rollout</td><td class="ref">${f1(RT.rollouts[K].ade_mm)}</td>`
+    h += `<tr><td class="k ref">for reference: the wide-Δt cube model (c2f6_cube — mixed step sizes, 6 frames), `
+       + `scored with one denoising pass, so read it against the one-shot row above rather than the 25-step one, `
+       + `at the same 5 ms step and the same episodes</td><td class="ref">${f1(RT.rollouts[K].ade_mm)}</td>`
        + `<td class="ref">${f1(RE.rollouts[K].ade_mm)}</td>`
        + `<td class="ref">${(RE.rollouts[K].ade_mm/RT.rollouts[K].ade_mm).toFixed(2)}×</td></tr>`;
   document.getElementById('t_fit').innerHTML = h;
@@ -210,6 +217,8 @@ function fitTable(){
      + `${EV.step.toLocaleString()}.`;
   document.getElementById('verdict').innerHTML = v;
   document.getElementById('n_ep').textContent = EV.n_stats;
+  const fl = document.getElementById('fl'); if (fl) fl.textContent = EV.future_len;
+  const sm = document.getElementById('samp'); if (sm) sm.textContent = EV.main_sampler || 'one denoising pass';
 }
 function pfChart(){
   const svg = document.getElementById('c_pf'), W = Math.max(svg.clientWidth, 340);
@@ -277,15 +286,17 @@ let EP2 = null;
 async function sectionSAMP(){
   const host = document.getElementById('grid_s'); clear(host);
   const r = EV.grid[EP2] && EV.grid[EP2][K]; if (!r) return;
-  const NAME = {draw1_25step: '25 steps', pyramid_25step: 'pyramid, 25 steps'};
+  const NAME = {oneshot: 'one denoising pass', draw1_25step: '25 steps, another seed',
+                pyramid_25step: 'pyramid, 25 steps'};
   const shown = (r.variants || []).filter(v => v.name in NAME);
-  const arms = [{bin:'pred', name:'one step', ade:r.ade_mm, col:PR_COL}]
+  const arms = [{bin:'pred', name: EV.main_sampler || '25 steps', ade:r.ade_mm, col:PR_COL}]
     .concat(shown.map((v,i) => ({bin:v.name, name:NAME[v.name], ade:v.ade_mm, col:ALT[i%3]})));
   for (const a of arms)
     await tile(host, EVB, r.dir, `<b>${a.name}</b> · ${a.ade} mm`,
       [{bin:'gt', color:GT_COL, size:0.014}, {bin:a.bin, color:a.col, size:0.015}]);
   let h = '<tr><th>sampler</th><th>rollout ADE (mm)</th><th>final error (mm)</th></tr>'
-        + `<tr><td class="k">one step — a single pass at t=999</td><td>${r.ade_mm}</td><td>${r.fde_mm}</td></tr>`;
+        + `<tr><td class="k">${EV.main_sampler || '25 steps'} — what this page reports</td>`
+        + `<td>${r.ade_mm}</td><td>${r.fde_mm}</td></tr>`;
   for (const v of shown) h += `<tr><td class="k">${NAME[v.name]}</td><td>${v.ade_mm}</td><td>${v.fde_mm}</td></tr>`;
   document.getElementById('t_s').innerHTML = h;
 }
