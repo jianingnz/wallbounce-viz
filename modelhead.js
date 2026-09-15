@@ -23,12 +23,12 @@ const M = {
   c2f6_cube_dt5_adaln_bi: {
     name: 'Cube · 5 ms', pts: '512 cube-shell points', cn: 'C=2, N=16',
     dt: 'single Δt 5 ms', cond: 'adaLN Δt', attn: 'bidirectional', params: '39.2 M',
-    train: '140k steps, batch 32', arena: '1 m arena'},
+    train: '140k steps, global batch 32 — 4.48 M windows', arena: '1 m arena'},
   cube_dt5_adaln_bi: {
     name: 'Cube · 5 ms · 331 M', pts: '512 cube-shell points', cn: 'C=2, N=16',
     dt: 'single Δt 5 ms', cond: 'adaLN Δt', attn: 'bidirectional',
     params: '331.4 M · widths to 1024, depths 1/2/4/8',
-    train: '140k steps, batch 16 — half the 39 M’s windows at the same step count',
+    train: '140k steps, global batch 32 on 2 GPUs — the same 4.48 M windows as the 39 M',
     arena: '1 m arena'},
   c2n6_water_dt5_adaln_bi: {
     name: 'Water · 5 ms', pts: '1,024 liquid points', cn: 'C=2, N=6',
